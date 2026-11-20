@@ -71,6 +71,12 @@ export class SoundBank {
 
   uiClick() { this.blip(660, 0.07, 'square', 0.12); }
   pickup() { this.blip(880, 0.09, 'sine', 0.2); this.blip(1320, 0.14, 'sine', 0.2, 0.07); }
+  /** The hidden-package chime: a brighter, higher sparkle than a mission pickup. */
+  packageFound() {
+    this.blip(1318, 0.1, 'triangle', 0.22);
+    this.blip(1760, 0.16, 'triangle', 0.22, 0.06);
+    this.blip(2637, 0.22, 'sine', 0.12, 0.12);
+  }
   gunshot() { this.noise(0.13, 0.5, 2600); this.blip(160, 0.09, 'sawtooth', 0.22, 0, 60); }
   punch() { this.noise(0.09, 0.4, 700); }
   crash(intensity = 1) { this.noise(0.22, 0.4 * intensity, 900); this.blip(90, 0.2, 'triangle', 0.25, 0, 45); }
@@ -128,7 +134,7 @@ export class SoundBank {
     }
     if (this.sirenOsc) {
       this.sirenTimer += dt;
-      if (this.sirenTimer > 0.42) {
+      if (this.sirenTimer > 0.34) { // a faster two-tone, in step with the strobing lightbars
         this.sirenTimer = 0;
         this.sirenHigh = !this.sirenHigh;
         this.sirenOsc.frequency.value = this.sirenHigh ? 960 : 720;

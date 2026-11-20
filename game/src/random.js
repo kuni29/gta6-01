@@ -19,6 +19,10 @@ export class Rng {
   int(min, max) { return Math.floor(this.float(min, max + 1)); }
   pick(list) { return list[Math.floor(this.next() * list.length)]; }
   chance(p) { return this.next() < p; }
+  /** A random heading in radians, [0, 2π) — spawn code was hand-rolling this. */
+  angle() { return this.next() * Math.PI * 2; }
+  /** A coin-flip sign, -1 or 1. */
+  sign() { return this.next() < 0.5 ? -1 : 1; }
   shuffle(list) {
     for (let i = list.length - 1; i > 0; i -= 1) {
       const j = Math.floor(this.next() * (i + 1));

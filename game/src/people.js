@@ -60,8 +60,8 @@ export function createPedestrian(ring, rng) {
   });
   const ped = {
     x: ring.x + rng.float(-ring.ring, ring.ring), z: ring.z - ring.ring,
-    heading: rng.float(0, 6.28), vx: 0, vz: 0, phase: rng.float(0, 6),
-    health: 60, state: 'walk', fleeT: 0, home: ring, wp: null,
+    heading: rng.angle(), vx: 0, vz: 0, phase: rng.float(0, 6),
+    health: 60, state: 'walk', fleeT: 0, idleT: 0, home: ring, wp: null,
     mesh: parts.group, parts, dead: false, respawnT: 0,
   };
   pickWaypoint(ped, rng);
@@ -89,14 +89,21 @@ export function stepPedestrian(ped, dt, city, rng, threat) {
   }
   let speed = 2.2;
   let tx = ped.wp.x; let tz = ped.wp.z;
-  if (threat && Math.hypot(threat.x - ped.x, threat.z - ped.z) < 14) ped.fleeT = 2.6;
+  if (threat && Math.hypot(threat.x - ped.x, threat.z - ped.z) < 14) { ped.fleeT = 2.6; ped.idleT = 0; }
   if (ped.fleeT > 0) {
     ped.fleeT -= dt;
     speed = 8.5;
     const away = Math.atan2(ped.x - (threat ? threat.x : ped.x), ped.z - (threat ? threat.z : ped.z));
     tx = ped.x + Math.sin(away) * 10;
     tz = ped.z + Math.cos(away) * 10;
+  } else if (ped.idleT > 0) {
+    // A breather at the corner: stand, watch the traffic go by, then stroll on.
+    ped.idleT -= dt;
+    ped.vx = 0; ped.vz = 0;
+    animatePerson(ped, dt);
+    return;
   } else if (Math.hypot(tx - ped.x, tz - ped.z) < 1.2) {
+    if (rng.chance(0.3)) ped.idleT = rng.float(0.8, 2.4);
     pickWaypoint(ped, rng);
     tx = ped.wp.x; tz = ped.wp.z;
   }

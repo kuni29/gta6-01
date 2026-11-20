@@ -3,6 +3,8 @@
 // is mid-motion), poses the player, police and HUD for that scene, paints twice and sets
 // window.__shotReady. The scenes are the game's own systems, never a mock-up.
 
+import { syncCarMesh } from './vehicles.js';
+
 function finish(api) {
   let painted = 0;
   function paint() {
@@ -37,8 +39,10 @@ const SCENES = {
   /** The title screen over the living city, seen from the beach side at golden hour. */
   start(api) {
     runAmbient(api, 2.5);
-    api.camera.position.set(86, 30, 172);
-    api.camera.lookAt(-10, 6, 30);
+    // Round 2: lower and closer than round 1's high survey shot — the skyline looms
+    // over the title instead of shrinking under it, and the sun glow sits in frame.
+    api.camera.position.set(58, 15, 166);
+    api.camera.lookAt(-20, 12, 0);
     finish(api);
   },
 
@@ -48,12 +52,13 @@ const SCENES = {
     runAmbient(api, 3);
     // On the avenue at x=-22 (lane -18.8), heading +z: buildings flank, road runs ahead.
     const car = api.game.spawnCarAt('coupe', 0xd94f3d, -18.8, 38, 0);
-    car.speed = 17;
+    car.speed = 19;
     api.game.spawnCarAt('sedan', 0x3d7bd9, -18.8, 74, 0); // same lane, ahead
     api.game.spawnCarAt('buggy', 0x39b0a5, -25.2, 58, Math.PI); // oncoming lane
+    api.game.spawnCarAt('sedan', 0x5a6a7a, -18.8, 13, 0); // same lane, trailing behind
     api.player.mesh.visible = false;
     api.player.x = car.x; api.player.z = car.z;
-    chaseCamera(api, car, 0);
+    chaseCamera(api, car, 0, 11, 4.3); // lower and tighter than round 1: speed reads better
     api.hud.setCash(170);
     api.hud.setStars(0);
     api.hud.setHealth(100);
@@ -70,14 +75,17 @@ const SCENES = {
     // On the avenue at x=22, hero heading -z (pi). Camera rides 13 behind the hero, so the
     // two pursuit cars sit 8-11 behind him, offset to each side — inside the frame.
     const car = api.game.spawnCarAt('sedan', 0x3d7bd9, 25.2, 10, Math.PI);
-    car.speed = 24;
+    car.speed = 26;
     api.player.mesh.visible = false;
     api.player.x = car.x; api.player.z = car.z;
     api.wanted.heat = 300;
     const p1 = api.game.spawnCarAt('police', 0xf2f2f2, 22.1, 16.2, Math.PI);
     const p2 = api.game.spawnCarAt('police', 0xf2f2f2, 28.4, 17.2, Math.PI * 0.97);
-    const p3 = api.game.spawnCarAt('police', 0xf2f2f2, 18.8, -20, Math.PI * 0.92);
+    const p3 = api.game.spawnCarAt('police', 0xf2f2f2, 21.5, -13, Math.PI * 0.95); // cutting in ahead, in frame
     for (const p of [p1, p2, p3]) { p.driver = 'police'; p.speed = 23; api.police.push(p); }
+    // Freeze the new strobes mid-alternation — p1 and p3 caught on red, p2 on blue —
+    // so the still shows the flash the old bobbing lightbar never could.
+    for (const [p, t] of [[p1, 0.05], [p2, 0.2], [p3, 0.05]]) { p.strobeSeed = 0; syncCarMesh(p, t); }
     chaseCamera(api, car, Math.PI, 14, 5.9);
     api.hud.setCash(470);
     api.hud.setStars(3);
@@ -92,16 +100,25 @@ const SCENES = {
   mission(api) {
     hideTitleShowHud(api);
     const m = api.placePosition('marina');
-    const car = api.game.spawnCarAt('coupe', 0xf2b13d, m.x + 16, m.z + 18, Math.PI);
-    api.player.x = m.x + 11; api.player.z = m.z + 24;
-    api.player.heading = Math.PI * 0.85;
+    // Restaged on the marina road: round 1 sat the coupe on open sand and the frame was
+    // half empty beach. Now the coupe waits in the eastbound lane (road centre is
+    // m.z - 22, lanes ±3.2), Rico stands at the kerb a few steps short of it, and the
+    // eastern skyline fills the background behind the beacon.
+    const car = api.game.spawnCarAt('coupe', 0xf2b13d, m.x + 16, m.z - 25.2, Math.PI / 2);
+    api.game.spawnCarAt('sedan', 0x5a6a7a, m.x - 40, m.z - 18.8, -Math.PI / 2); // westbound lane, far down the road
+    api.player.x = m.x + 6; api.player.z = m.z - 28.5;
+    api.player.heading = Math.PI / 2;
     api.player.mesh.position.set(api.player.x, 0, api.player.z);
     api.player.mesh.rotation.y = api.player.heading;
     api.beacon.group.visible = true;
     api.beacon.group.position.set(car.x, 0, car.z);
     runAmbient(api, 2);
-    api.camera.position.set(api.player.x - 10, 6.4, api.player.z + 13);
-    api.camera.lookAt(car.x, 1.4, car.z);
+    // The camera stands mid-road east of the action (asphalt is guaranteed clear of
+    // buildings — the first staging put it inside a marina block and filled the left
+    // of the frame with a wall) and looks west: Rico, the coupe and the beacon in
+    // frame, the sunset glow behind them.
+    api.camera.position.set(m.x + 24, 4.6, m.z - 20);
+    api.camera.lookAt(m.x + 12, 1.3, m.z - 25.4);
     api.hud.setCash(20);
     api.hud.setStars(0);
     api.hud.setHealth(100);

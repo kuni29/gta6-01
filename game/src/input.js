@@ -61,6 +61,12 @@ export function createInput(canvas) {
     get mouseDown() { return mouseDown; },
     /** The one-shot presses since the last call, as ACT_* flags. */
     takeActions() { const a = actions; actions = 0; return a; },
+    /**
+     * Drop any queued presses without reading them. A run start calls this so a stray
+     * click on the title screen (which queues ACT_SHOOT) never fires Rico's gun — or
+     * pauses the game — on the very first frame of play.
+     */
+    drain() { actions = 0; },
     /** Test/shots hook: force held keys from a script (used by the screenshot autopilot). */
     setHeld(patch) { Object.assign(held, patch); },
     press(act) { actions |= act; },

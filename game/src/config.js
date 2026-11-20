@@ -47,8 +47,8 @@ export const CAR = {
 export const WANTED = {
   maxStars: 5,
   perStar: 100,
-  decayPerSecond: 3.2,       // while no police see the player
-  seenDecayPerSecond: 0.6,   // while in sight it barely cools
+  decayPerSecond: 4.2,       // while no police see the player (round 2: lying low pays off sooner)
+  seenDecayPerSecond: 0.9,   // while in sight it still cools, just slowly
   crime: {
     stealCar: 55,
     hitPedestrian: 130,
@@ -68,6 +68,19 @@ export const ECONOMY = {
   bustedFineRate: 0.25,      // share of cash lost when busted
   wastedFee: 60,             // hospital fee, flat
   saveKey: 'neon-coast-heat-save-v1',
+};
+
+/**
+ * Hidden packages: gold caches stashed at the city's landmarks. Each one pays on
+ * pickup and respawns a while later (so the loop never dries up), but the found-set
+ * behind the HUD counter is permanent — and completing it pays a one-off bonus.
+ */
+export const PACKAGES = {
+  count: 12,
+  reward: 75,
+  allFoundBonus: 250,
+  respawnSeconds: 45,
+  pickupRadius: 2.8,
 };
 
 export const WORLD = {

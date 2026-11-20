@@ -102,6 +102,15 @@ export function generateCity(seed) {
       parkedSpots.push({ x: lines[i] + (rng.chance(0.5) ? 4.6 : -4.6), z: c.z + rng.float(-9, 9), vertical: true });
     }
   }
+  // A second, sparser rank along the horizontal roads, so the east-west streets offer
+  // stealable cars too instead of leaving whole avenues empty.
+  for (let i = 1; i < lines.length - 1; i += 1) {
+    for (let j = 0; j < n; j += 1) {
+      if (!rng.chance(0.3)) continue;
+      const c = blockCentre(j, 0);
+      parkedSpots.push({ x: c.x + rng.float(-9, 9), z: lines[i] + (rng.chance(0.5) ? 4.6 : -4.6), vertical: false });
+    }
+  }
 
   return {
     buildings, colliders, palms, crates, parkedSpots, pedSpots,

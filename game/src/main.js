@@ -3,7 +3,7 @@
 // driving, traffic, pedestrians, police, combat, missions, HUD, sound and saving.
 // ?shot=start|drive|chase|mission stages a screenshot scene instead of the live game.
 
-import { CITY, ECONOMY, PLAYER, WANTED } from './config.js';
+import { CITY, ECONOMY, PACKAGES, PLAYER, WANTED } from './config.js';
 import { Rng } from './random.js';
 import { generateCity, placePosition, collideBuildings } from './city.js';
 import { buildScene, makeBeacon } from './scene.js';
@@ -53,7 +53,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.02;
+renderer.toneMappingExposure = 1.1; // lifted a touch in round 2: the sunset should glow, not sit flat
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 2000);
 const world3d = buildScene(scene, city, rng);
@@ -83,6 +83,31 @@ for (let i = 0; i < 26; i += 1) {
 const beacon = makeBeacon(0xffd94d);
 scene.add(beacon.group);
 const crates = []; // beach-mission crates: {x, z, mesh}
+
+// Hidden packages: gold caches stashed at the places a player naturally visits — the
+// marina, the docks, the bank's kerb, the park, two downtown intersections. Spots are
+// pushed out of building footprints at boot, so every cache sits on reachable ground.
+const packageSpots = [
+  ...[
+    ['marina', 10, 4], ['docks', -14, 10], ['bank', 14, 24], ['garage', -12, 14],
+    ['hospital', 12, 18], ['station', -14, 20], ['beach', -30, 8], ['beach', 34, 4],
+    ['fixerAlley', -16, 30],
+  ].map(([key, dx, dz]) => { const p = placePosition(key); return { x: p.x + dx, z: p.z + dz }; }),
+  { x: city.park.x - 10, z: city.park.z + 8 },
+  { x: 22, z: -22 },
+  { x: -66, z: -110 },
+];
+const packageGeo = new THREE.BoxGeometry(0.95, 0.95, 0.95);
+const packageMat = new THREE.MeshLambertMaterial({ color: 0xffc93d, emissive: 0x8a5a00 });
+const packages = packageSpots.map((s, i) => {
+  const spot = collideBuildings(city, s.x, s.z, 1.2);
+  const mesh = new THREE.Mesh(packageGeo, packageMat);
+  mesh.castShadow = true;
+  mesh.position.set(spot.x, 1.15, spot.z);
+  scene.add(mesh);
+  return { i, x: spot.x, z: spot.z, mesh, active: true, respawnT: 0, spin: i * 0.7 };
+});
+const packagesFound = new Set(); // indices found at least once — the HUD counter's truth
 
 // Tracers: a small pool of stretched boxes that flash for a frame when a shot is fired.
 const tracers = [];
@@ -133,6 +158,7 @@ function writeSave() {
   try {
     window.localStorage.setItem(ECONOMY.saveKey, JSON.stringify({
       cash, missionIndex: story.index, sideCount: story.sideCount,
+      packages: [...packagesFound],
     }));
   } catch { /* storage off: progress lasts this visit only */ }
 }
@@ -140,6 +166,9 @@ function applySave(s) {
   cash = Math.max(0, s.cash | 0);
   story.index = Math.min(4, s.missionIndex | 0);
   story.sideCount = s.sideCount | 0;
+  packagesFound.clear();
+  for (const i of s.packages || []) if (i >= 0 && i < PACKAGES.count) packagesFound.add(i);
+  hud.setPackages(packagesFound.size, PACKAGES.count);
 }
 
 // ---------- the facade missions.js talks to ----------
@@ -211,6 +240,32 @@ const game = {
 };
 function syncCrateTargets() {
   if (story.active) story.active.cratesLeft = crates.map((c) => ({ x: c.x, z: c.z }));
+}
+
+/**
+ * Collect one hidden package: it pays every time, counts toward the found-set only
+ * the first time, and completing the set pays the bonus once. The cache itself
+ * respawns later (see stepPlay), so the cash loop never dries up.
+ */
+function collectPackage(pkg) {
+  pkg.active = false;
+  pkg.mesh.visible = false;
+  pkg.respawnT = PACKAGES.respawnSeconds;
+  cash += PACKAGES.reward;
+  sound.packageFound();
+  const first = !packagesFound.has(pkg.i);
+  if (first) packagesFound.add(pkg.i);
+  hud.setPackages(packagesFound.size, PACKAGES.count);
+  if (first && packagesFound.size >= PACKAGES.count) {
+    cash += PACKAGES.allFoundBonus;
+    hud.showToast('ALL PACKAGES FOUND', `+$${PACKAGES.reward} — plus the $${PACKAGES.allFoundBonus} full-set bonus`, 3.4);
+  } else {
+    hud.showToast('HIDDEN PACKAGE', first
+      ? `+$${PACKAGES.reward} — ${packagesFound.size} of ${PACKAGES.count} found`
+      : `+$${PACKAGES.reward} — this stash restocked`);
+  }
+  hud.setCash(cash);
+  writeSave();
 }
 
 // ---------- helpers ----------
@@ -475,8 +530,21 @@ function stepPlay(dt) {
   beacon.group.visible = true;
   beacon.group.position.set(target.x, 0, target.z);
   beacon.pillar.material.opacity = 0.26 + Math.sin(time * 3.2) * 0.1;
+  beacon.pool.material.opacity = 0.15 + Math.sin(time * 3.2) * 0.07;
   beacon.ring.rotation.z = time * 0.8;
   for (const c of crates) c.mesh.rotation.y += dt * 1.4;
+  // Hidden packages: spin and bob while live; walk or drive through one to collect.
+  const pp = playerCar || player;
+  for (const pkg of packages) {
+    if (!pkg.active) {
+      pkg.respawnT -= dt;
+      if (pkg.respawnT <= 0) { pkg.active = true; pkg.mesh.visible = true; }
+      continue;
+    }
+    pkg.mesh.position.y = 1.15 + Math.sin(time * 2.2 + pkg.spin) * 0.25;
+    pkg.mesh.rotation.y += dt * 1.8;
+    if (Math.hypot(pp.x - pkg.x, pp.z - pkg.z) < PACKAGES.pickupRadius) collectPackage(pkg);
+  }
   // Shadow frustum follows the player.
   const focus = playerCar || player;
   world3d.sun.position.set(focus.x - 140, 190, focus.z - 90);
@@ -610,6 +678,8 @@ function startPlay(fresh) {
   document.getElementById('end-screen').classList.remove('on');
   hud.show(true);
   hud.setCash(cash);
+  hud.setPackages(packagesFound.size, PACKAGES.count);
+  input.drain(); // a click on the menu must not fire (or pause) the first frame of play
   state = 'play';
   sound.unlock();
   sound.uiClick();
@@ -644,7 +714,8 @@ window.__game = {
   get state() { return state; },
   get cash() { return cash; },
   get fps() { return lastFps; },
-  player, cars, police, peds, story, wanted, renderer,
+  player, cars, police, peds, story, wanted, renderer, packages,
+  get packagesFound() { return packagesFound.size; },
   get playerCar() { return playerCar; },
 };
 
@@ -706,6 +777,7 @@ function frame(now) {
     hud.drawMinimap({
       player: playerCar ? { x: playerCar.x, z: playerCar.z, heading: playerCar.heading } : player,
       city, traffic: cars, police, target: state === 'play' ? story.target() : null, time,
+      packages: packages.filter((p) => p.active),
     });
   }
   renderer.render(scene, camera);

@@ -21,13 +21,23 @@ export class Hud {
     this.carname = document.getElementById('carname');
     this.damage = document.getElementById('damageflash');
     this.map = document.getElementById('minimap').getContext('2d');
+    this.packagesEl = document.getElementById('packages');
     this.toastT = 0;
     this.lastStars = -1;
+    this.lastPackages = '';
   }
 
   show(on) { this.root.classList.toggle('on', on); }
 
   setCash(n) { this.cash.textContent = `$${Math.max(0, Math.floor(n)).toLocaleString('en-US')}`; }
+
+  /** The hidden-package counter under the cash: "◆ 3 / 12 PACKAGES". */
+  setPackages(found, total) {
+    const text = `◆ ${found} / ${total} PACKAGES`;
+    if (text === this.lastPackages) return;
+    this.lastPackages = text;
+    this.packagesEl.textContent = text;
+  }
 
   setStars(stars) {
     if (stars === this.lastStars) return;
@@ -131,6 +141,19 @@ export class Hud {
       g.beginPath(); g.arc(mx, my, r, 0, 6.3); g.fill();
     };
     for (const c of view.traffic) dot(c.x, c.z, 'rgba(255,255,255,0.75)', 2);
+    // Hidden packages still out there: small magenta diamonds (drawn as rotated squares).
+    if (view.packages) {
+      for (const p of view.packages) {
+        const [mx, my] = toMap(p.x, p.z);
+        if (mx < -6 || my < -6 || mx > S + 6 || my > S + 6) continue;
+        g.fillStyle = '#ff4dd2';
+        g.save();
+        g.translate(mx, my);
+        g.rotate(Math.PI / 4);
+        g.fillRect(-2.6, -2.6, 5.2, 5.2);
+        g.restore();
+      }
+    }
     for (const c of view.police) dot(c.x, c.z, (Math.floor(view.time * 4) % 2 ? '#ff4040' : '#4d7dff'), 3.4);
     if (view.target) {
       const [mx, my] = toMap(view.target.x, view.target.z);
@@ -158,6 +181,11 @@ export class Hud {
     g.moveTo(0, -7); g.lineTo(4.6, 5); g.lineTo(0, 2.4); g.lineTo(-4.6, 5);
     g.closePath(); g.fill(); g.stroke();
     g.restore();
+    // North marker, so the fixed north-up map reads at a glance.
+    g.fillStyle = 'rgba(255,255,255,0.9)';
+    g.font = '700 10px sans-serif';
+    g.textAlign = 'center';
+    g.fillText('N', C, 13);
     g.restore();
   }
 }

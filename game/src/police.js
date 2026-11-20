@@ -61,7 +61,7 @@ export function maintainFleet(fleet, stars, player, city, rng, onAdd, onRemove) 
     const x = vertical ? line + 3.2 : Math.max(-city.size / 2 + 12, Math.min(city.size / 2 - 12, along));
     const z = vertical ? Math.max(-city.size / 2 + 12, Math.min(city.size / 2 - 12, along)) : line - 3.2;
     if (Math.hypot(x - player.x, z - player.z) < 48) continue;
-    const car = createCar('police', 0xf2f2f2, x, z, rng.float(0, 6.28));
+    const car = createCar('police', 0xf2f2f2, x, z, rng.angle());
     car.driver = 'police';
     car.stuckT = 0; car.reverseT = 0; car.shootCd = rng.float(0.5, 1.5);
     fleet.push(car);
@@ -75,6 +75,7 @@ export function maintainFleet(fleet, stars, player, city, rng, onAdd, onRemove) 
  * officer fires on an on-foot player in range; hits are reported as events.
  */
 export function stepPoliceCar(car, dt, player, playerCar, city, events, rng, shootAllowed = false) {
+  car.fxT = (car.fxT || 0) + dt; // the lightbar strobes off the car's own clock
   const target = playerCar || player;
   const lead = playerCar ? 0.55 : 0.15;
   const tx = target.x + (target.vx || Math.sin(target.heading) * (target.speed || 0)) * lead;
@@ -88,7 +89,7 @@ export function stepPoliceCar(car, dt, player, playerCar, city, events, rng, sho
     car.speed = Math.max(-9, car.speed - 20 * dt);
     car.x += Math.sin(car.heading) * car.speed * dt;
     car.z += Math.cos(car.heading) * car.speed * dt;
-    syncCarMesh(car);
+    syncCarMesh(car, car.fxT);
     return;
   }
   let targetSpeed = 33.5;
@@ -110,7 +111,7 @@ export function stepPoliceCar(car, dt, player, playerCar, city, events, rng, sho
     car.shootCd = rng.float(0.8, 1.5);
     events.push(rng.chance(0.42) ? 'policeHit' : 'policeMiss');
   }
-  syncCarMesh(car);
+  syncCarMesh(car, car.fxT);
 }
 
 /** True when this officer can see the player (close, roughly facing, not through a block). */

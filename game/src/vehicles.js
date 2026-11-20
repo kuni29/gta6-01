@@ -60,15 +60,69 @@ export function makeCarMesh(typeKey, color) {
   body.castShadow = true;
   group.add(body);
   let lightbar = null;
-  if (typeKey === 'police') {
-    const lb = [
-      { w: 0.55, h: 0.18, d: 0.5, x: -0.42, y: 1.48, z: -0.25, color: 0xff2a2a },
-      { w: 0.55, h: 0.18, d: 0.5, x: 0.42, y: 1.48, z: -0.25, color: 0x2a6aff },
-    ];
-    lightbar = new THREE.Mesh(mergeParts(lb), new THREE.MeshBasicMaterial({ vertexColors: true }));
-    group.add(lightbar);
-  }
+  if (typeKey === 'police') lightbar = makeLightbar(group);
   return { group, lightbar };
+}
+
+// Police lightbar colours: the lit lamp, its dark unlit glass, per side.
+const LAMP = {
+  red: 0xff2222, redOff: 0x4a0d12,
+  blue: 0x2a6aff, blueOff: 0x0d1e4a,
+};
+
+/**
+ * Build a PSPD lightbar as separate lamp meshes on a dark housing — deliberately NOT
+ * merged like the body — so the red and blue halves can strobe against each other.
+ * Each lamp also gets a soft additive halo box that only shows while that lamp is lit,
+ * which is what sells the flash on walls, road and screenshots. Returns the handles
+ * updateLightbar drives; the meshes ride on the car group, so they inherit its motion.
+ */
+function makeLightbar(group) {
+  const bar = new THREE.Group();
+  const housing = new THREE.Mesh(
+    mergeParts([{ w: 1.5, h: 0.13, d: 0.52, x: 0, y: 1.44, z: -0.25, color: 0x14161a }]),
+    sharedMat,
+  );
+  bar.add(housing);
+  const lampGeo = new THREE.BoxGeometry(0.58, 0.2, 0.46);
+  const red = new THREE.Mesh(lampGeo, new THREE.MeshBasicMaterial({ color: LAMP.red }));
+  red.position.set(-0.43, 1.56, -0.25);
+  const blue = new THREE.Mesh(lampGeo, new THREE.MeshBasicMaterial({ color: LAMP.blue }));
+  blue.position.set(0.43, 1.56, -0.25);
+  const haloGeo = new THREE.BoxGeometry(1.05, 0.62, 0.9);
+  const haloMat = (color) => new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const redHalo = new THREE.Mesh(haloGeo, haloMat(LAMP.red));
+  redHalo.position.copy(red.position);
+  const blueHalo = new THREE.Mesh(haloGeo, haloMat(LAMP.blue));
+  blueHalo.position.copy(blue.position);
+  bar.add(red, blue, redHalo, blueHalo);
+  group.add(bar);
+  return { red, blue, redHalo, blueHalo };
+}
+
+/**
+ * Strobe a police lightbar at time t: the red and blue lamps alternate at ~7 Hz, the
+ * lit one throwing its halo while the other drops to dark glass. Each car's phase is
+ * offset by its strobeSeed so a whole fleet never blinks in unison. At t <= 0 both
+ * lamps burn steady — the pose the screenshot scenes freeze.
+ */
+export function updateLightbar(car, t) {
+  const lb = car.lightbar;
+  if (!lb) return;
+  if (t <= 0) {
+    lb.red.material.color.setHex(LAMP.red);
+    lb.blue.material.color.setHex(LAMP.blue);
+    lb.redHalo.material.opacity = 0.16;
+    lb.blueHalo.material.opacity = 0.16;
+    return;
+  }
+  const redOn = Math.floor(t * 7 + (car.strobeSeed || 0)) % 2 === 0;
+  lb.red.material.color.setHex(redOn ? LAMP.red : LAMP.redOff);
+  lb.blue.material.color.setHex(redOn ? LAMP.blueOff : LAMP.blue);
+  lb.redHalo.material.opacity = redOn ? 0.3 : 0.0;
+  lb.blueHalo.material.opacity = redOn ? 0.0 : 0.3;
 }
 
 /** A car entity: physics state plus its mesh, parked or driven by traffic/police/player. */
@@ -81,6 +135,9 @@ export function createCar(typeKey, color, x, z, heading) {
     x, z, heading, speed: 0, health: CAR.maxHealth,
     mesh: group, lightbar, driver: null, // null | 'traffic' | 'police' | 'player'
     route: null, wrecked: false, honkAt: 0,
+    fxT: 0, // this car's own effects clock (drives the lightbar strobe)
+    // A deterministic per-car strobe phase from its spawn point, in half-cycles.
+    strobeSeed: Math.abs(Math.sin(x * 12.9898 + z * 78.233)) * 2,
   };
 }
 
@@ -222,7 +279,8 @@ export function stepPlayerCar(car, dt, input, city, events) {
   }
   car.x = fixed.x; car.z = fixed.z;
   if (px === car.x && pz === car.z && throttle !== 0) car.speed *= 0.9;
-  syncCarMesh(car);
+  car.fxT += dt; // a stolen interceptor keeps strobing while the player drives it
+  syncCarMesh(car, car.fxT);
   return speedRatio;
 }
 
@@ -254,15 +312,16 @@ export function resolveCarCollisions(cars, events, playerCar) {
   }
 }
 
-/** Copy a car's physics state into its mesh (and flash police lights by time). */
+/**
+ * Copy a car's physics state into its mesh and strobe its lightbar, if it has one.
+ * The strobe reads `time` when the caller passes a clock (the main loop does for
+ * parked cars), and falls back to the car's own effects clock otherwise — police.js
+ * and the player driver advance that clock themselves.
+ */
 export function syncCarMesh(car, time = 0) {
   car.mesh.position.set(car.x, car.wrecked ? -0.12 : 0, car.z);
   car.mesh.rotation.y = car.heading;
-  if (car.lightbar) {
-    const phase = Math.floor(time * 5) % 2;
-    car.lightbar.rotation.y = phase ? 0.0 : 0.0;
-    car.lightbar.position.y = phase ? 0.02 : -0.02;
-    car.mesh.rotation.z = car.wrecked ? 0.04 : 0;
-  }
+  car.mesh.rotation.z = car.wrecked ? 0.04 : 0;
+  if (car.lightbar) updateLightbar(car, time || car.fxT || 0);
   if (car.health <= 0 && !car.wrecked) car.wrecked = true;
 }

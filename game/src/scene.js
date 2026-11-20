@@ -34,7 +34,7 @@ function facadeAtlas(rng) {
     const ww = 512 / cols; const hh = 496 / rows;
     for (let y = 0; y < rows; y += 1) {
       for (let x = 0; x < cols; x += 1) {
-        const lit = rng.next() < 0.22;
+        const lit = rng.next() < 0.3;
         g.fillStyle = lit ? '#ffd98a' : (rng.next() < 0.5 ? '#8fb0c2' : '#7498ab');
         g.fillRect(ox + x * ww + 6, oy + y * hh + 7, ww - 12, hh - 14);
         g.fillStyle = 'rgba(255,255,255,0.28)';
@@ -199,12 +199,15 @@ export function buildScene(scene, city, rng) {
     depthWrite: false,
     uniforms: {},
     vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: 'varying vec3 vP; void main(){ float h = normalize(vP).y; vec3 top = vec3(0.36, 0.56, 0.82); vec3 mid = vec3(0.98, 0.72, 0.47); vec3 low = vec3(1.0, 0.55, 0.38); vec3 c = h > 0.12 ? mix(mid, top, smoothstep(0.12, 0.65, h)) : mix(low, mid, smoothstep(-0.08, 0.12, h)); gl_FragColor = vec4(c, 1.0); }',
+    // The grade: a warm gradient, a hot glow around the sun's azimuth (it sits low over
+    // the north-west, where buildScene's directional light lives), and a magenta neon
+    // band hugging the horizon — the two-tone sunset the title art promises.
+    fragmentShader: 'varying vec3 vP; void main(){ vec3 d = normalize(vP); float h = d.y; vec3 top = vec3(0.33, 0.53, 0.82); vec3 mid = vec3(0.99, 0.71, 0.44); vec3 low = vec3(1.0, 0.47, 0.4); vec3 c = h > 0.12 ? mix(mid, top, smoothstep(0.12, 0.65, h)) : mix(low, mid, smoothstep(-0.08, 0.12, h)); vec3 sunDir = normalize(vec3(-0.53, 0.6, -0.34)); float sunAmt = pow(max(dot(d, sunDir), 0.0), 16.0); c += vec3(1.0, 0.6, 0.28) * sunAmt * 0.55; float horizon = pow(1.0 - abs(h), 6.0); c += vec3(0.42, 0.08, 0.3) * horizon * 0.38; gl_FragColor = vec4(c, 1.0); }',
   });
   scene.add(new THREE.Mesh(skyGeo, skyMat));
-  scene.fog = new THREE.Fog(0xf2c99a, 120, 620);
+  scene.fog = new THREE.Fog(0xeeb287, 120, 620);
 
-  const hemi = new THREE.HemisphereLight(0xbdd8ff, 0x8a6a4a, 0.75);
+  const hemi = new THREE.HemisphereLight(0xbdd8ff, 0x9a7050, 0.8);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xffdfae, 1.25);
   sun.position.set(-140, 190, -90);
@@ -228,7 +231,8 @@ export function buildScene(scene, city, rng) {
 
   const sea = new THREE.Mesh(
     new THREE.PlaneGeometry(1500, 420),
-    new THREE.MeshLambertMaterial({ color: 0x2e7fa8, transparent: true, opacity: 0.94 }),
+    // A whisper of emissive so the water holds a sunset sheen even in shadow.
+    new THREE.MeshLambertMaterial({ color: 0x2e7fa8, emissive: 0x0a2e3d, transparent: true, opacity: 0.94 }),
   );
   sea.rotation.x = -Math.PI / 2;
   sea.position.set(0, -0.35, city.size / 2 + 208);
@@ -349,7 +353,15 @@ export function makeBeacon(color) {
   );
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = 0.12;
-  group.add(pillar); group.add(ring);
+  // A soft pool of light on the ground inside the ring: it grounds the beacon in the
+  // world (and in screenshots) instead of leaving it floating as pure UI.
+  const pool = new THREE.Mesh(
+    new THREE.CircleGeometry(3.6, 28),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false }),
+  );
+  pool.rotation.x = -Math.PI / 2;
+  pool.position.y = 0.1;
+  group.add(pillar); group.add(ring); group.add(pool);
   group.visible = false;
-  return { group, pillar, ring };
+  return { group, pillar, ring, pool };
 }

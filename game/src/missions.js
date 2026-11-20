@@ -11,8 +11,8 @@ export const MISSIONS = [
   {
     id: 'first-wheels',
     title: 'First Wheels',
-    payout: 150,
-    brief: 'Sol: "A client left a coupe by Marina Verde. Take it to the docks — no questions, no dents."',
+    payout: 175,
+    brief: 'Sol: "A client left a coupe by Marina Verde. Take it to the docks — no questions, no dents. And Rico: little gold packages are stashed all over this city. You find one, it\'s yours."',
     steps: [
       { kind: 'goto', place: 'marina', label: 'Reach the marina', r: 13, dz: 18 },
       { kind: 'enterMissionCar', label: 'Get in the marked coupe' },
@@ -26,7 +26,7 @@ export const MISSIONS = [
   {
     id: 'hot-package',
     title: 'Hot Package',
-    payout: 300,
+    payout: 350,
     timeLimit: 150,
     brief: 'Sol: "Pick up the package behind Solano Trust. The bank\'s alarm disagrees with us — move fast."',
     steps: [
@@ -39,7 +39,7 @@ export const MISSIONS = [
   {
     id: 'beach-crates',
     title: 'Beach Run',
-    payout: 450,
+    payout: 500,
     timeLimit: 130,
     brief: 'Sol: "Three crates washed up along Solano Beach. Collect them all before the tide — or the PSPD — does."',
     steps: [
@@ -124,8 +124,8 @@ export class Story {
     const dests = ['docks', 'marina', 'bank', 'garage', 'beach', 'hospital'];
     const dest = dests[Math.floor(game.rng() * dests.length)];
     const def = {
-      id: 'side-job', title: 'Side Job — Delivery', payout: 120 + Math.floor(game.rng() * 90),
-      timeLimit: 110, brief: `Sol: "Quick one, Rico. My sedan, to ${PLACES[dest].name}. Clock's running."`,
+      id: 'side-job', title: 'Side Job — Delivery', payout: 150 + Math.floor(game.rng() * 110),
+      timeLimit: 120, brief: `Sol: "Quick one, Rico. My sedan, to ${PLACES[dest].name}. Clock's running."`,
       steps: [
         { kind: 'enterMissionCar', label: 'Get in Sol\'s sedan' },
         { kind: 'goto', place: dest, label: `Deliver to ${PLACES[dest].name}`, r: 12, needCar: true },
