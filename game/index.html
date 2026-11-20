@@ -16,6 +16,7 @@
   #hud.on { display: block; }
   #cashbox { position: absolute; top: 14px; right: 18px; text-align: right; text-shadow: 0 2px 4px rgba(0,0,0,.65); }
   #cash { font-size: 30px; font-weight: 800; color: #7dff9a; letter-spacing: .5px; }
+  #packages { font-size: 13px; font-weight: 700; letter-spacing: 1.5px; color: #ff9df0; margin-top: 1px; min-height: 16px; }
   #stars { font-size: 26px; letter-spacing: 3px; color: #ffd94d; min-height: 30px; }
   #stars .off { color: rgba(255,255,255,.22); }
   #healthwrap { position: absolute; left: 18px; bottom: 196px; width: 190px; }
@@ -65,7 +66,7 @@
   #pause-screen h1, #end-screen h1 { font-size: 52px; margin: 0 0 6px; letter-spacing: 3px; }
   #end-screen h1.bad { color: #ff5964; }
   #end-screen p, #pause-screen p { max-width: 520px; font-size: 16px; line-height: 1.5; color: #ffeedd; }
-  #vignette { position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 180px rgba(20,0,30,.55); z-index: 2; }
+  #vignette { position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 190px rgba(24,0,34,.62); z-index: 2; }
   #damageflash { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(255,30,40,.5) 100%); opacity: 0; z-index: 3; }
 </style>
 </head>
@@ -76,7 +77,7 @@
 <div id="damageflash"></div>
 
 <div id="hud">
-  <div id="cashbox"><div id="cash">$0</div><div id="stars"></div></div>
+  <div id="cashbox"><div id="cash">$0</div><div id="stars"></div><div id="packages"></div></div>
   <div id="objective"><div class="obj-title"></div><div class="obj-text"></div><div class="obj-timer"></div></div>
   <div id="healthwrap"><div id="healthlabel">HEALTH</div><div id="healthbar"><div id="healthfill"></div></div></div>
   <canvas id="minimap" width="168" height="168"></canvas>
@@ -100,7 +101,8 @@
   </div>
   <div id="controls">
     <b>W A S D</b> move / drive &nbsp;·&nbsp; <b>E</b> enter car / take job &nbsp;·&nbsp; <b>Shift</b> run &nbsp;·&nbsp; <b>Space / Click</b> shoot<br>
-    <b>F</b> punch &nbsp;·&nbsp; <b>H</b> horn &nbsp;·&nbsp; <b>P / Esc</b> pause &nbsp;·&nbsp; <b>M</b> mute &nbsp;·&nbsp; progress saves automatically
+    <b>F</b> punch &nbsp;·&nbsp; <b>H</b> horn &nbsp;·&nbsp; <b>P / Esc</b> pause &nbsp;·&nbsp; <b>M</b> mute &nbsp;·&nbsp; progress saves automatically<br>
+    <b>◆</b> 12 hidden packages are stashed around Port Solano — $75 each, and a bonus for the full set
   </div>
 </div>
 
