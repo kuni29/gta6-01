@@ -19,10 +19,11 @@ You are **Rico Vega**, a wheelman down to his last twenty bucks in **Port Solano
 - **Open city** — a 9×9-block coastal grid with downtown towers, a park, beaches, a marina and docks; explore on foot or behind the wheel.
 - **Traffic & crowds** — AI traffic drives the grid and honks back; pedestrians stroll, flee and dive out of the way.
 - **Any car is yours** — walk up and press E to steal anything, including PSPD interceptors (theft is a crime, if witnessed).
-- **Wanted system** — crimes raise heat across 5 stars; police intercept, ram and, from 3 stars, shoot. Get caught and you're **BUSTED** (fined at the station); get killed and you're **WASTED** (hospital fee). Heat decays when you lie low.
+- **Wanted system** — crimes raise heat across 5 stars; police intercept, ram and, from 3 stars, shoot, their lightbars strobing red/blue (each car on its own phase) the whole time. Get caught and you're **BUSTED** (fined at the station); get killed and you're **WASTED** (hospital fee). Heat decays when you lie low — faster than it used to.
 - **Story chain** — four jobs from Sol (First Wheels → Hot Package → Beach Run → The Big Score) with markers, timers, fail states and payouts, then repeatable side deliveries.
+- **Hidden packages** — 12 gold caches stashed at the city's landmarks (marina, docks, bank, park, downtown intersections…). Each pays $75 on pickup and respawns a while later, the HUD counter and minimap diamonds track the set, and finding all 12 pays a completion bonus.
 - **Combat** — fists (F) and a pistol (Space / click) with tracers, muzzle flash and hit reactions.
-- **Full HUD** — cash, wanted stars, health, objective banner with timer, prompts, toasts, speedometer and a live circular minimap (objective, police and traffic blips).
+- **Full HUD** — cash, wanted stars, health, a hidden-package counter, objective banner with timer, prompts, toasts, speedometer and a live circular minimap (objective, police, traffic and package blips, with a north marker).
 - **Sound** — fully synthesized WebAudio: engine, horns, two-tone sirens, gunfire, impacts, pickups and jingles. M mutes.
 - **Save/load** — cash and story progress persist in localStorage; Continue from the title screen.
 - **Performance** — the whole skyline is one merged, atlas-textured mesh; physics sub-steps keep game speed real-time, and an adaptive quality path (plus a software-renderer mode) keeps it playable on weak machines.
