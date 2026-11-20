@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Neon Coast Heat — an open-world crime game in Port Solano</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a0f1e; font-family: "Segoe UI", Verdana, sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  /* Read aloud, never shown: the status line screen readers announce. */
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; display: none; z-index: 4; }
+  #hud.on { display: block; }
+  #cashbox { position: absolute; top: 14px; right: 18px; text-align: right; text-shadow: 0 2px 4px rgba(0,0,0,.65); }
+  #cash { font-size: 30px; font-weight: 800; color: #7dff9a; letter-spacing: .5px; }
+  #stars { font-size: 26px; letter-spacing: 3px; color: #ffd94d; min-height: 30px; }
+  #stars .off { color: rgba(255,255,255,.22); }
+  #healthwrap { position: absolute; left: 18px; bottom: 196px; width: 190px; }
+  #healthlabel { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-shadow: 0 1px 3px #000; }
+  #healthbar { height: 12px; background: rgba(0,0,0,.55); border: 2px solid rgba(255,255,255,.75); border-radius: 6px; overflow: hidden; }
+  #healthfill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff5964, #ff8c42); transition: width .15s; }
+  #minimap { position: absolute; left: 18px; bottom: 18px; width: 168px; height: 168px; border: 3px solid rgba(255,255,255,.8); border-radius: 50%; background: #20303c; box-shadow: 0 4px 18px rgba(0,0,0,.5); }
+  #objective { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); max-width: 560px; text-align: center;
+    background: rgba(10,10,24,.62); border: 1px solid rgba(255,217,77,.55); border-radius: 10px; padding: 8px 18px; display: none; }
+  #objective .obj-title { color: #ffd94d; font-weight: 800; font-size: 15px; letter-spacing: 1px; }
+  #objective .obj-text { font-size: 14px; margin-top: 2px; }
+  #objective .obj-timer { color: #ff9d5c; font-weight: 800; font-size: 15px; }
+  #prompt { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); background: rgba(10,10,24,.72);
+    border-radius: 8px; padding: 8px 16px; font-size: 15px; display: none; }
+  #prompt b { color: #ffd94d; }
+  #toast { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); font-size: 34px; font-weight: 900;
+    letter-spacing: 2px; color: #fff; text-shadow: 0 3px 10px rgba(0,0,0,.8); opacity: 0; transition: opacity .3s; text-align: center; }
+  #toast small { display: block; font-size: 16px; font-weight: 600; color: #ffd94d; letter-spacing: 1px; }
+  #bustedbar { position: absolute; left: 50%; bottom: 210px; transform: translateX(-50%); width: 240px; display: none; text-align: center; }
+  #bustedbar .blabel { font-size: 12px; font-weight: 800; letter-spacing: 3px; color: #ff5964; text-shadow: 0 1px 3px #000; }
+  #bustedfillwrap { height: 10px; background: rgba(0,0,0,.55); border: 2px solid rgba(255,255,255,.7); border-radius: 5px; overflow: hidden; }
+  #bustedfill { height: 100%; width: 0%; background: #ff5964; }
+  #speedo { position: absolute; right: 22px; bottom: 20px; text-align: right; text-shadow: 0 2px 4px rgba(0,0,0,.7); display: none; }
+  #speedo .num { font-size: 40px; font-weight: 900; }
+  #speedo .unit { font-size: 13px; letter-spacing: 2px; color: #ffd94d; font-weight: 700; }
+  #carname { position: absolute; right: 22px; bottom: 78px; font-size: 15px; font-style: italic; color: #ffe9b0; text-shadow: 0 1px 3px #000; display: none; }
+
+  /* ---------- Screens ---------- */
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column;
+    text-align: center; color: #fff; z-index: 5; }
+  .screen.on { display: flex; }
+  #title-screen { background: linear-gradient(180deg, rgba(26,8,38,.25) 0%, rgba(26,8,38,.55) 78%, rgba(10,4,18,.88) 100%); }
+  #title-screen h1 { font-size: 74px; margin: 0; line-height: .95; font-weight: 900; letter-spacing: 2px;
+    background: linear-gradient(180deg, #ffe95c 15%, #ff9d5c 55%, #ff4d8d 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 4px 0 rgba(60,0,60,.55)); }
+  #title-screen h2 { font-size: 21px; margin: 8px 0 4px; letter-spacing: 6px; color: #aef3ff; font-weight: 600; text-shadow: 0 2px 6px #000; }
+  #title-screen .story { max-width: 620px; font-size: 15.5px; line-height: 1.55; color: #ffeedd; text-shadow: 0 1px 4px #000; margin: 12px 20px 4px; }
+  .btnrow { display: flex; gap: 14px; margin-top: 18px; pointer-events: auto; }
+  button.menu { pointer-events: auto; cursor: pointer; font-size: 18px; font-weight: 800; letter-spacing: 1px; padding: 12px 30px;
+    color: #20102a; background: linear-gradient(180deg, #ffe95c, #ffb347); border: 0; border-radius: 10px; box-shadow: 0 4px 0 #a35b12, 0 8px 18px rgba(0,0,0,.5); }
+  button.menu:hover { filter: brightness(1.08); }
+  button.menu.ghost { background: rgba(20,16,40,.75); color: #ffe9b0; box-shadow: 0 4px 0 rgba(0,0,0,.6); border: 1px solid rgba(255,217,77,.6); }
+  button.menu:disabled { opacity: .38; cursor: default; filter: grayscale(.6); }
+  #controls { margin-top: 20px; font-size: 13px; line-height: 1.9; color: #d9ecff; text-shadow: 0 1px 3px #000; }
+  #controls b { color: #ffd94d; }
+  #pause-screen, #end-screen { background: rgba(8,4,16,.72); }
+  #pause-screen h1, #end-screen h1 { font-size: 52px; margin: 0 0 6px; letter-spacing: 3px; }
+  #end-screen h1.bad { color: #ff5964; }
+  #end-screen p, #pause-screen p { max-width: 520px; font-size: 16px; line-height: 1.5; color: #ffeedd; }
+  #vignette { position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 180px rgba(20,0,30,.55); z-index: 2; }
+  #damageflash { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(255,30,40,.5) 100%); opacity: 0; z-index: 3; }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="Neon Coast Heat: explore Port Solano on foot and by car, run jobs for the fixer, and stay ahead of the police"></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+<div id="vignette"></div>
+<div id="damageflash"></div>
+
+<div id="hud">
+  <div id="cashbox"><div id="cash">$0</div><div id="stars"></div></div>
+  <div id="objective"><div class="obj-title"></div><div class="obj-text"></div><div class="obj-timer"></div></div>
+  <div id="healthwrap"><div id="healthlabel">HEALTH</div><div id="healthbar"><div id="healthfill"></div></div></div>
+  <canvas id="minimap" width="168" height="168"></canvas>
+  <div id="prompt"></div>
+  <div id="toast"></div>
+  <div id="bustedbar"><div class="blabel">BUSTED</div><div id="bustedfillwrap"><div id="bustedfill"></div></div></div>
+  <div id="carname"></div>
+  <div id="speedo"><span class="num">0</span> <span class="unit">MPH</span></div>
+</div>
+
+<div id="title-screen" class="screen on">
+  <h2>PORT SOLANO</h2>
+  <h1>NEON COAST<br>HEAT</h1>
+  <p class="story">You are <b>Rico Vega</b>, a wheelman down to his last twenty bucks in a sun-bleached
+  coastal city of palms, marinas and bad decisions. Fixer <b>Marisol "Sol" Reyes</b> has work for a driver
+  who doesn't ask questions. Run her jobs, stack cash, and remember: in Port Solano the heat is never
+  just the weather.</p>
+  <div class="btnrow">
+    <button class="menu" id="btn-new">NEW GAME</button>
+    <button class="menu ghost" id="btn-continue">CONTINUE</button>
+  </div>
+  <div id="controls">
+    <b>W A S D</b> move / drive &nbsp;·&nbsp; <b>E</b> enter car / take job &nbsp;·&nbsp; <b>Shift</b> run &nbsp;·&nbsp; <b>Space / Click</b> shoot<br>
+    <b>F</b> punch &nbsp;·&nbsp; <b>H</b> horn &nbsp;·&nbsp; <b>P / Esc</b> pause &nbsp;·&nbsp; <b>M</b> mute &nbsp;·&nbsp; progress saves automatically
+  </div>
+</div>
+
+<div id="pause-screen" class="screen">
+  <h1>PAUSED</h1>
+  <p id="pause-stats"></p>
+  <div class="btnrow">
+    <button class="menu" id="btn-resume">RESUME</button>
+    <button class="menu ghost" id="btn-restart">RESTART STORY</button>
+  </div>
+</div>
+
+<div id="end-screen" class="screen">
+  <h1 id="end-title">WASTED</h1>
+  <p id="end-text"></p>
+  <div class="btnrow"><button class="menu" id="btn-respawn">RESPAWN</button></div>
+</div>
+
+<script src="./vendor/three.min.js"></script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
