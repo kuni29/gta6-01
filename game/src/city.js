@@ -15,6 +15,18 @@ export function blockCentre(bx, bz) {
   return { x: (bx - (CITY.blocksPerSide - 1) / 2) * CITY.cell, z: (bz - (CITY.blocksPerSide - 1) / 2) * CITY.cell };
 }
 
+/** The four sidewalk corners of a block, in world units — handy for spawn placement. */
+export function blockCorners(bx, bz) {
+  const c = blockCentre(bx, bz);
+  const half = CITY.cell / 2 + 2.6;
+  return [
+    { x: c.x - half, z: c.z - half },
+    { x: c.x + half, z: c.z - half },
+    { x: c.x - half, z: c.z + half },
+    { x: c.x + half, z: c.z + half },
+  ];
+}
+
 /** World position of a named place from config.PLACES. */
 export function placePosition(key) {
   const p = PLACES[key];

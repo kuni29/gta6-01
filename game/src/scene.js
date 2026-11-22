@@ -336,6 +336,24 @@ export function buildScene(scene, city, rng) {
     city.colliders.push({ minX: c.x - 1.3, maxX: c.x + 1.3, minZ: c.z - 1.3, maxZ: c.z + 1.3, h: 2.4 });
   });
 
+  // Beach umbrellas on the open sand south of the last road: a cone canopy on a
+  // thin pole, one per open beach lot, so the beach reads as a place, not a void.
+  const umbrellaColors = [0xff6b6b, 0xffd94d, 0x4ecdc4];
+  const umbrellaPoleGeo = new THREE.CylinderGeometry(0.07, 0.07, 2.4, 5);
+  const umbrellaTopGeo = new THREE.ConeGeometry(1.9, 0.8, 8);
+  const umbrellaPoleMat = new THREE.MeshLambertMaterial({ color: 0x8a6a4a });
+  for (let i = 0; i < 3; i += 1) {
+    const ux = -132 + i * 132;
+    const uz = 190 + (i % 2) * 3;
+    const canopy = new THREE.Mesh(umbrellaTopGeo, new THREE.MeshLambertMaterial({ color: umbrellaColors[i] }));
+    canopy.position.set(ux, 2.6, uz);
+    canopy.castShadow = true;
+    scene.add(canopy);
+    const pole = new THREE.Mesh(umbrellaPoleGeo, umbrellaPoleMat);
+    pole.position.set(ux, 1.2, uz);
+    scene.add(pole);
+  }
+
   return { sun, sea, sea2 };
 }
 

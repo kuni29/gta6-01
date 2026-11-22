@@ -8,7 +8,7 @@ import { collideBuildings, insideBuilding } from './city.js';
 import { mergeParts, partMaterial } from './scene.js';
 
 export const CAR_TYPES = {
-  coupe: { name: 'Solano Coupe', topSpeed: 34, colors: [0xd94f3d, 0x3d7bd9, 0xf2b13d, 0x53b06a] },
+  coupe: { name: 'Solano Coupe', topSpeed: 34, colors: [0xd94f3d, 0x3d7bd9, 0xf2b13d, 0x53b06a, 0x9b59b6] },
   sedan: { name: 'Palmetto Sedan', topSpeed: 29, colors: [0xc0c6cc, 0x5a6a7a, 0x7a4a5e, 0x39594f] },
   taxi: { name: 'Solano Cab', topSpeed: 29, colors: [0xf7c948] },
   van: { name: 'Marina Van', topSpeed: 25, colors: [0xd8d3c8, 0x87a8b8, 0xb8524a] },
@@ -17,6 +17,11 @@ export const CAR_TYPES = {
   armored: { name: 'Armored Van', topSpeed: 24, colors: [0x4a5058] },
 };
 const TYPE_KEYS = Object.keys(CAR_TYPES).filter((k) => k !== 'police' && k !== 'armored');
+
+/** A random factory colour for a car type, drawn from a seeded generator. */
+export function randomPaint(typeKey, rng) {
+  return rng.pick(CAR_TYPES[typeKey].colors);
+}
 
 let sharedMat = null;
 

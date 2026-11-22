@@ -91,3 +91,10 @@ export const WORLD = {
   sunColor: 0xffe3b3,
   fogColor: 0xf2c99a,
 };
+
+/** Small feel knobs the loop reads every frame. */
+export const FEEL = {
+  cameraShakeDecay: 1.4,   // how fast impact shake fades, per second
+  seaBobAmplitude: 0.08,   // sea surface bob, world units
+  packageBob: 0.25,        // hidden-package hover amplitude, world units
+};

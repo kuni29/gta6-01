@@ -35,6 +35,16 @@ function chaseCamera(api, focus, heading, dist = 13, height = 5.2) {
   api.camera.lookAt(focus.x + Math.sin(heading) * 7, 1.6, focus.z + Math.cos(heading) * 7);
 }
 
+/** A low, close camera — near ground level — for a grittier, in-the-action frame. */
+function lowAngleCamera(api, focus, heading, dist = 9, height = 2.1) {
+  api.camera.position.set(
+    focus.x - Math.sin(heading) * dist,
+    height,
+    focus.z - Math.cos(heading) * dist,
+  );
+  api.camera.lookAt(focus.x + Math.sin(heading) * 6, 1.2, focus.z + Math.cos(heading) * 6);
+}
+
 const SCENES = {
   /** The title screen over the living city, seen from the beach side at golden hour. */
   start(api) {

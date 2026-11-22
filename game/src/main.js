@@ -709,6 +709,12 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden && state === 'play') pauseGame();
 });
 
+// Losing the window entirely (alt-tab, another app) pauses just like hiding the
+// tab does, so the world never runs on while nobody is watching it.
+window.addEventListener('blur', () => {
+  if (state === 'play') pauseGame();
+});
+
 // A small introspection hook for automated play-tests (and curious players in devtools).
 window.__game = {
   get state() { return state; },

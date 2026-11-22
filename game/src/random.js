@@ -30,4 +30,12 @@ export class Rng {
     }
     return list;
   }
+  /** Pick an entry from [{ value, weight }] with probability proportional to weight. */
+  weightedPick(entries) {
+    let total = 0;
+    for (const e of entries) total += e.weight;
+    let roll = this.next() * total;
+    for (const e of entries) { roll -= e.weight; if (roll <= 0) return e.value; }
+    return entries[entries.length - 1].value;
+  }
 }

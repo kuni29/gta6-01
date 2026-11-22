@@ -10,6 +10,16 @@ export const ACT_HORN = 16;      // H
 export const ACT_MUTE = 32;      // M
 export const ACT_ENTER_KEY = 64; // Enter (menus)
 
+/**
+ * Normalise a KeyboardEvent code to the canonical form this module matches on:
+ * trim stray whitespace and fold the legacy 'OSLeft'/'OSRight' meta keys to 'Meta'.
+ */
+export function normalizeKeyCode(code) {
+  const c = String(code || '').trim();
+  if (c === 'OSLeft' || c === 'OSRight') return 'Meta';
+  return c;
+}
+
 const HELD = {
   forward: ['KeyW', 'ArrowUp'],
   back: ['KeyS', 'ArrowDown'],
@@ -36,13 +46,14 @@ export function createInput(canvas) {
   let mouseDown = false;
 
   window.addEventListener('keydown', (event) => {
-    const name = codeToHeld.get(event.code);
+    const code = normalizeKeyCode(event.code);
+    const name = codeToHeld.get(code);
     if (name) { held[name] = true; event.preventDefault(); return; }
-    const act = ONESHOT[event.code];
+    const act = ONESHOT[code];
     if (act && !event.repeat) { actions |= act; event.preventDefault(); }
   });
   window.addEventListener('keyup', (event) => {
-    const name = codeToHeld.get(event.code);
+    const name = codeToHeld.get(normalizeKeyCode(event.code));
     if (name) held[name] = false;
   });
   window.addEventListener('blur', () => {
