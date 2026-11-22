@@ -38,39 +38,34 @@ const CAPS = {
   game_max_files: 993,
   game_max_bytes: 48 * 1024 * 1024,
   game_path_max_bytes: 1000,
-} as const;
+};
 const DOSSIER_MAX_BYTES = 1536 * 1024;
 const SCREENSHOT_NAME = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const JPEG_MAGIC = [0xff, 0xd8, 0xff];
 
 /** Fail the run with a plain message (the grader shows it as the error). */
-function fail(message: string): never {
+function fail(message) {
   throw new Error(`main.ts: ${message}`);
 }
 
 /** sha256 of bytes, hex — the summary's fingerprint of the dossier. */
-function sha256Hex(bytes: Uint8Array): string {
+function sha256Hex(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
 /** True when the bytes start with the given magic numbers. */
-function startsWith(bytes: Uint8Array, magic: readonly number[]): boolean {
+function startsWith(bytes, magic) {
   return magic.every((b, i) => bytes[i] === b);
 }
 
 // ------------------------------------------------------------------ walking
 
 /** One entry found under a directory, with its path relative to that directory. */
-interface Entry {
-  rel: string;
-  isDir: boolean;
-  bytes: number;
-}
 
 /** Every file and directory under `dir`, in sorted path order. */
-function walk(dir: string, relBase = ''): Entry[] {
-  const out: Entry[] = [];
+function walk(dir, relBase = '') {
+  const out = [];
   const names = readdirSync(dir).sort();
   for (const name of names) {
     const rel = relBase === '' ? name : `${relBase}/${name}`;
@@ -92,7 +87,7 @@ function walk(dir: string, relBase = ''): Entry[] {
 // ------------------------------------------------------------------ checks
 
 /** The game tree's own cap check, run before the copy so a bad tree fails fast. */
-function checkGameTree(gameDir: string): { files: number; bytes: number } {
+function checkGameTree(gameDir) {
   if (!existsSync(gameDir) || !statSync(gameDir).isDirectory()) {
     fail('game/: no such directory');
   }
@@ -117,7 +112,7 @@ function checkGameTree(gameDir: string): { files: number; bytes: number } {
 }
 
 /** The screenshots' own cap check: 3 or 4 PNG/JPEG files, each within its cap. */
-function checkScreenshots(shotsDir: string): { name: string; bytes: number }[] {
+function checkScreenshots(shotsDir) {
   if (!existsSync(shotsDir) || !statSync(shotsDir).isDirectory()) {
     fail('screenshots/: no such directory');
   }
@@ -125,7 +120,7 @@ function checkScreenshots(shotsDir: string): { name: string; bytes: number }[] {
   if (names.length < 3 || names.length > CAPS.screenshots.max) {
     fail(`screenshots/: ${names.length} images, need 3 to ${CAPS.screenshots.max}`);
   }
-  const found: { name: string; bytes: number }[] = [];
+  const found = [];
   for (const name of names) {
     if (!SCREENSHOT_NAME.test(name)) fail(`screenshots/${name}: a name the gate will not take`);
     const full = join(shotsDir, name);
@@ -143,7 +138,7 @@ function checkScreenshots(shotsDir: string): { name: string; bytes: number }[] {
 }
 
 /** Copy a tree in sorted order, so the copy's bytes never depend on readdir order. */
-function copyTree(srcDir: string, dstDir: string): void {
+function copyTree(srcDir, dstDir) {
   mkdirSync(dstDir, { recursive: true });
   for (const name of readdirSync(srcDir).sort()) {
     const src = join(srcDir, name);
@@ -157,7 +152,7 @@ function copyTree(srcDir: string, dstDir: string): void {
 
 // ------------------------------------------------------------------ main
 
-function main(): void {
+function main() {
   const root = dirname(fileURLToPath(import.meta.url));
   const outDir = resolve(process.env.MAKEFUN_OUTPUT_DIR || '/output');
   // Never let the output directory eat the repository itself.
@@ -170,8 +165,10 @@ function main(): void {
   const game = checkGameTree(gameDir);
   const shots = checkScreenshots(shotsDir);
 
-  rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
+  for (const name of readdirSync(outDir)) {
+    rmSync(join(outDir, name), { recursive: true, force: true });
+  }
   copyTree(gameDir, join(outDir, 'game'));
   copyTree(shotsDir, join(outDir, 'screenshots'));
 
@@ -195,7 +192,7 @@ function main(): void {
   console.log(`game: ${game.files} files, ${game.bytes} bytes, ${gameEntries} entries (cap ${CAPS.game_max_files} / ${CAPS.game_max_bytes} bytes)`);
   for (const shot of shots) console.log(`screenshot: ${shot.name} (${shot.bytes} bytes)`);
   console.log(`dossier.json: ${dossier.length} bytes, sha256 ${sha256Hex(dossier)}`);
-  console.log(`screenshots: ${shots.length} files, first by name is the cover (${basename(shots[0]!.name)})`);
+  console.log(`screenshots: ${shots.length} files, first by name is the cover (${basename(shots[0].name)})`);
 }
 
 main();

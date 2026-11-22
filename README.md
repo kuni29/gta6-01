@@ -31,4 +31,4 @@ Neon Coast Heat は、three.js で描くオープンワールドの犯罪ゲー�
 
 ## ビルドと遊び方
 
-出力先ディレクトリを MAKEFUN_OUTPUT_DIR で指定して main.ts を node で実行すると、静的ファイル一式がその出力先に生成されます。serve.ts を使うと生成物をローカルで配信でき、ブラウザを開いてそのまますぐに遊べます。スクリーンショットは、URLに ?shot=start、?shot=drive、?shot=chase、?shot=mission のいずれかを付けたステージングで撮影します。
+出力先ディレクトリを MAKEFUN_OUTPUT_DIR で指定して main.ts を node で実行すると、静的ファイル一式がその出力先に生成されます。なお、エントリーポイントの main.ts は今ラウンドからプレーンな JavaScript で書かれています（ファイル名は従来どおり main.ts です）。serve.ts を使うと生成物をローカルで配信でき、ブラウザを開けばそのまますぐに遊べます。スクリーンショットは、URLに ?shot=start、?shot=drive、?shot=chase、?shot=mission のいずれかを付けたステージングで撮影します。
