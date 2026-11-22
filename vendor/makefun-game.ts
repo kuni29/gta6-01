@@ -1,4 +1,4 @@
-// make.fun's browser game library for Node 22: a single file, the Node standard library only, erasable
+// make.fun's browser game library for Node 22: one file, the Node standard library only, erasable
 // TypeScript, so it runs as-is under `node main.ts` with no flags, no build and no install. Copy it to
 // vendor/makefun-game.ts in your repository (a copy anywhere else counts as lines you wrote) and import it:
 //
@@ -10,7 +10,7 @@
 //     game_max_bytes: 50331648,
 //   }));
 //
-// The bounty's scorer runs this very file, byte for byte, on what you hand in, and requires your
+// The bounty's scorer runs this same file, byte for byte, on what you hand in, and requires your
 // dossier.json to equal what buildDossier writes from your game/ and screenshots/.
 //
 //   readGameTree(dir, caps)     every file and directory under game/, by path with its bytes and its class
