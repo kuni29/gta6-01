@@ -1,236 +1,313 @@
-// missions.js — the story of Neon Coast Heat: four jobs from fixer Sol Reyes that take Rico
-// from broke wheelman to the big score, then endless side deliveries. A mission is a list
-// of steps (go somewhere, take a car, collect crates, deliver clean); this module owns the
-// state machine and talks to the rest of the game through the `game` facade main.js gives it.
+// missions.js — Sol's jobs, as a graph of steps.
+//
+// A mission is not a list of chores in a fixed order: it is a small directed
+// graph. Each step (node) names one thing to do — go somewhere, get in a
+// particular car, pick something up, collect crates, lose the heat, wait it
+// out — and names the step that follows it. The Story walks the graph one node
+// at a time, and a mission is done when the walk runs out of nodes. Side jobs
+// are built the same way, from the same node kinds, with their targets rolled
+// from the city's landmarks so no two feel identical.
+//
+// The Story never touches the world directly. It talks to the game through the
+// small facade main.js hands it (playerPos, playerCar, wantedStars, spawnCarAt,
+// addCash, onBrief, onAlarm, onPickup, setCrates, nearCrate, collectCrate and
+// friends), and the main loop reads back target(), objective() and the
+// 'complete' / 'failed' verdicts update() returns.
 
-import { PLACES } from './config.js';
+import { WANTED } from './config.js';
 import { placePosition } from './city.js';
 
-/** The four story missions, in order. Payouts land the moment the last step completes. */
+// ------------------------------------------------------------------ the graph
+
+/**
+ * One step of a job. `kind` says what counts as done:
+ *   goto    reach the target point (on foot or in a car)
+ *   enter   get into a car of `carType` (the job car, spawned at the step)
+ *   pickup  reach the target and take the package (trips the alarm)
+ *   carry   reach the target while carrying (follows a pickup)
+ *   collect pick up every crate the step scattered (see `crates`)
+ *   escape  lose the heat (zero stars) or reach the safehouse with 2 or fewer
+ *   wait    stay at the target for `wait` seconds
+ * `limit` is a countdown in seconds; `next` is the following node's id, or
+ * null for the last step of the job.
+ */
 export const MISSIONS = [
   {
     id: 'first-wheels',
     title: 'First Wheels',
-    payout: 175,
-    brief: 'Sol: "A client left a coupe by Marina Verde. Take it to the docks — no questions, no dents. And Rico: little gold packages are stashed all over this city. You find one, it\'s yours."',
-    steps: [
-      { kind: 'goto', place: 'marina', label: 'Reach the marina', r: 13, dz: 18 },
-      { kind: 'enterMissionCar', label: 'Get in the marked coupe' },
-      { kind: 'goto', place: 'docks', label: 'Drive to the docks', r: 12, dz: 20, needCar: true },
+    brief: "Sol's coupe is waiting in the alley. Take it to the docks and don't scratch the paint.",
+    payout: 150,
+    nodes: [
+      { id: 'take-car', kind: 'enter', carType: 'coupe', title: 'FIRST WHEELS', text: "Get in Sol's coupe — it's yours for the job", target: { place: 'fixerAlley', dx: 6, dz: 26 }, next: 'to-docks' },
+      { id: 'to-docks', kind: 'goto', title: 'FIRST WHEELS', text: 'Take the coupe to Port Solano Docks', target: { place: 'docks' }, next: null },
     ],
-    spawn: (game) => {
-      const p = placePosition('marina');
-      return game.spawnCarAt('coupe', 0xf2b13d, p.x + 16, p.z + 18, Math.PI);
-    },
   },
   {
     id: 'hot-package',
     title: 'Hot Package',
-    payout: 350,
-    timeLimit: 150,
-    brief: 'Sol: "Pick up the package behind Solano Trust. The bank\'s alarm disagrees with us — move fast."',
-    steps: [
-      { kind: 'goto', place: 'bank', label: 'Reach the bank\'s back lot', r: 12, dz: 20 },
-      { kind: 'pickup', label: 'Grab the package', r: 4.5, dx: 10, dz: 17, alarm: true },
-      { kind: 'goto', place: 'marina', label: 'Deliver to Marina Verde', r: 13, dz: 18 },
+    brief: 'A package is sitting at the docks and the PSPD want it too. Grab it, run it to the marina, and try not to get made.',
+    payout: 320,
+    nodes: [
+      { id: 'grab', kind: 'pickup', title: 'HOT PACKAGE', text: 'Pick up the package at the docks', target: { place: 'docks', dx: -10, dz: 8 }, next: 'deliver' },
+      { id: 'deliver', kind: 'carry', title: 'HOT PACKAGE', text: 'Deliver to Marina Verde — lose them or outrun them', target: { place: 'marina' }, limit: 150, next: null },
     ],
-    spawn: () => null,
   },
   {
-    id: 'beach-crates',
-    title: 'Beach Run',
-    payout: 500,
-    timeLimit: 130,
-    brief: 'Sol: "Three crates washed up along Solano Beach. Collect them all before the tide — or the PSPD — does."',
-    steps: [
-      { kind: 'collect', label: 'Collect the beach crates', count: 3 },
+    id: 'beach-salvage',
+    title: 'Beach Salvage',
+    brief: 'Three crates washed up on Solano Beach with Sol\'s name on them. Haul them to the chop shop, one run or three — your call.',
+    payout: 420,
+    nodes: [
+      { id: 'to-beach', kind: 'goto', title: 'BEACH SALVAGE', text: 'Head to Solano Beach — the crates are in the sand', target: { place: 'beach' }, next: 'crates' },
+      { id: 'crates', kind: 'collect', title: 'BEACH SALVAGE', text: 'Collect all 3 crates on the beach', target: { place: 'beach', dx: -8, dz: 4 }, crates: 3, next: 'to-garage' },
+      { id: 'to-garage', kind: 'carry', title: 'BEACH SALVAGE', text: 'Drop the crates at the Chop Shop Garage', target: { place: 'garage' }, next: null },
     ],
-    spawn: (game) => {
-      const spots = [
-        { x: -120, z: 190 }, { x: 8, z: 192 }, { x: 128, z: 189 },
-      ];
-      game.setCrates(spots);
-      return null;
-    },
+  },
+  {
+    id: 'bank-run',
+    title: 'The Bank Run',
+    brief: 'Solano Trust is moving cash at noon and Sol wants a word with the courier. Be at the bank inside ninety seconds — then disappear.',
+    payout: 650,
+    nodes: [
+      { id: 'to-bank', kind: 'goto', title: 'THE BANK RUN', text: 'Reach Solano Trust Bank before the window closes', target: { place: 'bank' }, limit: 90, next: 'vanish' },
+      { id: 'vanish', kind: 'escape', title: 'THE BANK RUN', text: 'Lose the heat — zero stars, or reach the garage with 2 or fewer', target: { place: 'garage' }, next: null },
+    ],
   },
   {
     id: 'big-score',
     title: 'The Big Score',
-    payout: 1000,
-    brief: 'Sol: "An armored van sits at the bank, full of other people\'s money. Bring it to the Chop Shop — clean."',
-    steps: [
-      { kind: 'goto', place: 'bank', label: 'Reach Solano Trust Bank', r: 12, dz: 20 },
-      { kind: 'enterMissionCar', label: 'Steal the armored van' },
-      { kind: 'deliverClean', place: 'garage', label: 'Deliver to the Chop Shop with no heat', r: 11, dz: 22, needCar: true },
+    brief: "The one Sol's been planning all year: lift the armored van at the docks, bring it to the bank, load the cash and run it to the marina. Then vanish.",
+    payout: 1200,
+    nodes: [
+      { id: 'take-van', kind: 'enter', carType: 'armored', title: 'THE BIG SCORE', text: 'Steal the armored van at the docks', target: { place: 'docks', dx: 12, dz: -6 }, next: 'to-bank' },
+      { id: 'to-bank', kind: 'goto', title: 'THE BIG SCORE', text: 'Take the van to the bank — the crew is waiting', target: { place: 'bank' }, limit: 120, next: 'load' },
+      { id: 'load', kind: 'carry', title: 'THE BIG SCORE', text: 'Cash is loaded — deliver to Marina Verde', target: { place: 'marina' }, next: 'vanish' },
+      { id: 'vanish', kind: 'escape', title: 'THE BIG SCORE', text: 'Lose the heat and the job is done', target: { place: 'garage' }, next: null },
     ],
-    spawn: (game) => {
-      const p = placePosition('bank');
-      return game.spawnCarAt('armored', 0x4a5058, p.x - 6, p.z + 22, Math.PI / 2);
-    },
   },
 ];
 
+/** Landmarks a side job can send the player to, rolled fresh every time. */
+const SIDE_PLACES = ['docks', 'marina', 'bank', 'garage', 'hospital', 'station', 'beach'];
+
+/** Resolve a node's target {place, dx, dz} to world coordinates. */
+function nodeTarget(node) {
+  const base = placePosition(node.target.place);
+  return { x: base.x + (node.target.dx || 0), z: base.z + (node.target.dz || 0) };
+}
+
+/** Distance on the ground between two points. */
+function groundDist(a, b) {
+  return Math.hypot(a.x - b.x, a.z - b.z);
+}
+
+/** Build one side job from the node kinds: a fare, a courier run or a lookout. */
+function buildSideJob(rng) {
+  const pick = () => SIDE_PLACES[Math.floor(rng() * SIDE_PLACES.length)];
+  const kind = Math.floor(rng() * 3);
+  if (kind === 0) {
+    const dest = pick();
+    return {
+      id: 'side-fare',
+      title: 'Side Fare',
+      brief: `A regular needs a fast driver to ${placePosition(dest).name}. Ninety seconds, no questions.`,
+      payout: 90,
+      side: true,
+      nodes: [
+        { id: 'fare', kind: 'goto', title: 'SIDE FARE', text: `Drop the fare at ${placePosition(dest).name} — fast`, target: { place: dest }, limit: 90, next: null },
+      ],
+    };
+  }
+  if (kind === 1) {
+    const from = pick();
+    let to = pick();
+    while (to === from) to = pick();
+    return {
+      id: 'side-courier',
+      title: 'Side Courier',
+      brief: `Pick up a parcel at ${placePosition(from).name} and run it to ${placePosition(to).name}. Sol's cut is already taken.`,
+      payout: 140,
+      side: true,
+      nodes: [
+        { id: 'pickup', kind: 'pickup', title: 'SIDE COURIER', text: `Collect the parcel at ${placePosition(from).name}`, target: { place: from }, next: 'drop' },
+        { id: 'drop', kind: 'carry', title: 'SIDE COURIER', text: `Deliver to ${placePosition(to).name}`, target: { place: to }, limit: 120, next: null },
+      ],
+    };
+  }
+  const spot = pick();
+  return {
+    id: 'side-lookout',
+    title: 'Side Lookout',
+    brief: `Sol needs eyes on ${placePosition(spot).name} for a few seconds. Stand there, look casual, and don't get made.`,
+    payout: 110,
+    side: true,
+    nodes: [
+      { id: 'watch', kind: 'wait', title: 'SIDE LOOKOUT', text: `Hold position at ${placePosition(spot).name} and keep watch`, target: { place: spot }, wait: 12, next: null },
+    ],
+  };
+}
+
+// ------------------------------------------------------------------ the story
+
 /**
- * The story state machine. States: 'offered' (Sol waits at her alley), 'active',
- * 'complete' (story done; side jobs on offer). main.js renders target()/objective().
+ * The story's progress through the job graph. `index` is the next story job
+ * (0..4; done when it reaches 5), `sideCount` the side jobs finished, `active`
+ * the job in progress or null, `lastPayout` what the last job paid. The save
+ * system reads and writes index / sideCount directly.
  */
 export class Story {
   constructor() {
-    this.index = 0;           // next story mission
-    this.active = null;       // { def, stepIdx, car, timeLeft, collected }
+    this.index = 0;
     this.sideCount = 0;
+    this.active = null;
+    this.done = false;
+    this.lastPayout = 0;
   }
 
-  get done() { return this.index >= MISSIONS.length; }
-
-  /** Where the player should head: the active step's target, or Sol's alley when offered. */
+  /** Where the beacon points: the current step's target, or Sol's alley between jobs. */
   target() {
-    if (!this.active) {
-      const p = placePosition('fixerAlley');
-      return { x: p.x, z: p.z + 22, name: p.name, label: this.done ? 'Side job from Sol' : 'Meet Sol' };
-    }
-    const step = this.active.def.steps[this.active.stepIdx];
-    return stepTarget(this.active, step);
+    if (this.active) return nodeTarget(this.active.node);
+    return placePosition('fixerAlley');
   }
 
-  /** HUD objective lines for the current state. */
+  /** The objective banner's content: the current step, or the next job's invite. */
   objective() {
-    if (!this.active) {
-      return this.done
-        ? { title: 'FREE ROAM — SOL HAS SIDE WORK', text: 'Head to Sol\'s Alley for a delivery job', timer: 0 }
-        : { title: `JOB ${this.index + 1} — ${MISSIONS[this.index].title}`, text: 'Head to Sol\'s Alley to take the job', timer: 0 };
+    if (this.active) {
+      const node = this.active.node;
+      const timer = node.limit ? Math.max(0, node.limit - this.active.elapsed) : 0;
+      return { title: node.title, text: node.text, timer };
     }
-    const step = this.active.def.steps[this.active.stepIdx];
-    let text = step.label;
-    if (step.kind === 'collect') text = `${step.label} (${this.active.collected}/${step.count})`;
-    if (step.kind === 'deliverClean') text = `${step.label}${this.active.gameWantedStars() > 0 ? ' — lose the heat first' : ''}`;
-    return { title: this.active.def.title.toUpperCase(), text, timer: this.active.timeLeft || 0 };
+    if (!this.done) {
+      const def = MISSIONS[this.index];
+      return {
+        title: `JOB ${this.index + 1} — ${def.title.toUpperCase()}`,
+        text: 'Meet Sol at the alley — press E to take the job',
+        timer: 0,
+      };
+    }
+    return {
+      title: 'SIDE WORK',
+      text: 'Sol always has side work — press E at the alley',
+      timer: 0,
+    };
   }
 
-  /** Begin the next story mission (or a side job when the story is done). */
+  /** Take the next job: the next story mission, or a rolled side job once done. */
   start(game) {
-    if (this.done) { this.startSideJob(game); return; }
-    const def = MISSIONS[this.index];
+    if (this.active) return;
+    const def = this.index < MISSIONS.length ? MISSIONS[this.index] : buildSideJob(() => game.rng());
     this.active = {
-      def, stepIdx: 0, car: null, collected: 0,
-      timeLeft: def.timeLimit || 0, gameWantedStars: () => game.wantedStars(),
+      def,
+      node: def.nodes[0],
+      elapsed: 0,
+      carrying: false,
+      jobCar: null,
+      waitT: 0,
+      cratesLeft: [],
     };
-    this.active.car = def.spawn ? def.spawn(game) : null;
+    this.enterNode(game, this.active.node);
     game.onBrief(def.title, def.brief);
   }
 
-  /** A repeatable delivery: take Sol's car across town against the clock. */
-  startSideJob(game) {
-    const dests = ['docks', 'marina', 'bank', 'garage', 'beach', 'hospital'];
-    const dest = dests[Math.floor(game.rng() * dests.length)];
-    const def = {
-      id: 'side-job', title: 'Side Job — Delivery', payout: 150 + Math.floor(game.rng() * 110),
-      timeLimit: 120, brief: `Sol: "Quick one, Rico. My sedan, to ${PLACES[dest].name}. Clock's running."`,
-      steps: [
-        { kind: 'enterMissionCar', label: 'Get in Sol\'s sedan' },
-        { kind: 'goto', place: dest, label: `Deliver to ${PLACES[dest].name}`, r: 12, needCar: true },
-      ],
-    };
-    this.active = {
-      def, stepIdx: 0, car: null, collected: 0,
-      timeLeft: def.timeLimit, gameWantedStars: () => game.wantedStars(),
-    };
-    const p = placePosition('fixerAlley');
-    this.active.car = game.spawnCarAt('sedan', 0x7a4a5e, p.x + 2, p.z + 22, Math.PI / 2);
-    game.onBrief(def.title, def.brief);
-  }
-
-  /**
-   * Advance the active mission. Returns 'complete' | 'failed' | null; the caller pays out
-   * or cleans up. Fail states: timer out, mission car wrecked, delivery car abandoned hot.
-   */
-  update(dt, game) {
-    const a = this.active;
-    if (!a) return null;
-    if (a.timeLeft > 0) {
-      a.timeLeft -= dt;
-      if (a.timeLeft <= 0) return this.fail(game, 'Out of time');
+  /** Side effects of arriving at a step: spawn its job car, scatter its crates. */
+  enterNode(game, node) {
+    if (!this.active) return;
+    if (node.kind === 'enter') {
+      const spot = nodeTarget(node);
+      const color = node.carType === 'armored' ? 0x4a5058 : 0xd94f3d;
+      this.active.jobCar = game.spawnCarAt(node.carType, color, spot.x + 4, spot.z, 0);
+    } else if (node.kind === 'collect') {
+      const centre = nodeTarget(node);
+      const spots = [];
+      for (let i = 0; i < (node.crates || 3); i += 1) {
+        spots.push({ x: centre.x + (i - 1) * 7, z: centre.z + (i % 2 === 0 ? 5 : -6) });
+      }
+      game.setCrates(spots);
+      this.active.cratesLeft = spots.map((s) => ({ x: s.x, z: s.z }));
     }
-    if (a.car && a.car.wrecked) return this.fail(game, 'The car is wrecked');
-    const step = a.def.steps[a.stepIdx];
-    const t = stepTarget(a, step);
-    const p = game.playerPos();
-    const d = Math.hypot(p.x - t.x, p.z - t.z);
-    switch (step.kind) {
-      case 'goto':
-        if (d < step.r && (!step.needCar || game.playerCar() === a.car || !a.car)) return this.advance(game);
-        break;
-      case 'enterMissionCar':
-        if (a.car && game.playerCar() === a.car) {
-          if (a.def.id === 'big-score') game.onAlarm(300);
-          return this.advance(game);
-        }
-        break;
-      case 'pickup':
-        if (d < step.r) {
-          if (step.alarm) game.onAlarm(200);
-          game.onPickup();
-          return this.advance(game);
-        }
-        break;
-      case 'collect':
-        if (game.nearCrate(p, 4)) {
-          game.collectCrate(p);
-          a.collected += 1;
-          if (a.collected === 1) game.onAlarm(100);
-          if (a.collected >= step.count) return this.complete(game);
-        }
-        break;
-      case 'deliverClean':
-        if (d < step.r && game.wantedStars() === 0 && game.playerCar() === a.car) return this.complete(game);
-        break;
-      default:
-        break;
-    }
-    return null;
   }
 
-  advance(game) {
-    const a = this.active;
-    a.stepIdx += 1;
-    game.onStep(a.def.steps[a.stepIdx] ? a.def.steps[a.stepIdx].label : '');
-    if (a.stepIdx >= a.def.steps.length) return this.complete(game);
-    return null;
-  }
-
-  complete(game) {
-    const def = this.active.def;
-    const payout = def.payout;
-    this.lastPayout = payout;
-    if (def.id !== 'side-job') this.index += 1;
-    else this.sideCount += 1;
-    this.active = null;
-    game.clearCrates();
-    game.addCash(payout);
-    return 'complete';
-  }
-
+  /** Fail the active job with a reason, clearing any crates it scattered. */
   fail(game, reason) {
-    if (this.active && this.active.car && game.playerCar() !== this.active.car) game.removeCar(this.active.car);
-    this.active = null;
     game.clearCrates();
+    this.active = null;
     game.onFail(reason);
     return 'failed';
   }
-}
 
-/** World target of a step: a place, the mission car, or the nearest remaining crate. */
-function stepTarget(active, step) {
-  if (step.kind === 'enterMissionCar' && active.car) {
-    return { x: active.car.x, z: active.car.z, label: step.label };
+  /**
+   * Advance the active job one frame. Returns 'complete' when the last step
+   * finishes (the main loop pays out the toast and saves), 'failed' when a
+   * timer runs out or the job car is wrecked, and undefined otherwise.
+   */
+  update(dt, game) {
+    if (!this.active) return undefined;
+    const job = this.active;
+    const node = job.node;
+    job.elapsed += dt;
+
+    // The job car is the job: wreck it and there is nothing left to do.
+    if (job.jobCar && job.jobCar.wrecked) {
+      return this.fail(game, 'The job car is wrecked — Sol is not paying for that.');
+    }
+
+    // A countdown that hits zero ends the job, whatever step it was on.
+    if (node.limit && job.elapsed > node.limit) {
+      return this.fail(game, 'Out of time — the window closed.');
+    }
+
+    const pos = game.playerPos();
+    const target = nodeTarget(node);
+    let stepDone = false;
+
+    if (node.kind === 'goto' || node.kind === 'carry') {
+      stepDone = groundDist(pos, target) < 6;
+    } else if (node.kind === 'enter') {
+      const car = game.playerCar();
+      stepDone = Boolean(car && car.type === node.carType);
+    } else if (node.kind === 'pickup') {
+      if (groundDist(pos, target) < 5) {
+        stepDone = true;
+        job.carrying = true;
+        game.onPickup();
+        game.onAlarm(WANTED.crime.missionAlarm);
+      }
+    } else if (node.kind === 'collect') {
+      if (game.nearCrate(pos, 5)) game.collectCrate(pos);
+      const left = job.cratesLeft || [];
+      stepDone = left.length === 0;
+    } else if (node.kind === 'escape') {
+      const stars = game.wantedStars();
+      const safehouse = groundDist(pos, target) < 8;
+      stepDone = stars === 0 || (safehouse && stars <= 2);
+    } else if (node.kind === 'wait') {
+      if (groundDist(pos, target) < 8) {
+        job.waitT += dt;
+        stepDone = job.waitT >= (node.wait || 10);
+      } else {
+        job.waitT = 0;
+      }
+    }
+
+    if (!stepDone) return undefined;
+
+    // Step done: follow the graph edge, or finish the job.
+    game.onStep();
+    job.elapsed = 0;
+    job.waitT = 0;
+    if (!node.next) {
+      const payout = job.def.payout;
+      game.addCash(payout);
+      this.lastPayout = payout;
+      if (job.def.side) this.sideCount += 1;
+      else this.index += 1;
+      this.done = this.index >= MISSIONS.length;
+      this.active = null;
+      return 'complete';
+    }
+    const next = job.def.nodes.find((n) => n.id === node.next);
+    job.node = next;
+    this.enterNode(game, next);
+    return undefined;
   }
-  if (step.kind === 'collect' && active.cratesLeft && active.cratesLeft.length) {
-    const c = active.cratesLeft[0];
-    return { x: c.x, z: c.z, label: step.label };
-  }
-  if (step.place) {
-    const p = placePosition(step.place);
-    return { x: p.x + (step.dx || 0), z: p.z + (step.dz || 0), name: p.name, label: step.label };
-  }
-  return { ...placePosition('fixerAlley'), label: step.label };
 }

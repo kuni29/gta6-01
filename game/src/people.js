@@ -1,178 +1,408 @@
-// people.js — the humans of Port Solano: a low-poly person factory (merged body mesh plus
-// two swinging leg meshes), pedestrians who stroll the sidewalk ring of their home block
-// and flee from danger, and the on-foot movement controller for Rico himself.
+// people.js — the people of Port Solano: Rico on foot and the crowds who fill the
+// sidewalks. Pedestrians run a small behaviour machine (stroll, idle, flee, panic,
+// down) and steer around the city on their own sidewalk rings, so the streets feel
+// alive even when the player is just watching. Rico is one person built from the
+// same limb rig, driven by the camera-relative movement keys.
+//
+// Every person is a low-poly box figure: torso, head, two pivoted arms and two
+// pivoted legs. The walk cycle is a sine swing of the limb pivots, driven by how
+// fast that person is actually moving, so a standing figure is still and a
+// sprinting one pumps its arms. No model files are loaded; the meshes are built
+// from boxes at runtime.
 
 import { PLAYER } from './config.js';
 import { collideBuildings } from './city.js';
-import { mergeParts, partMaterial } from './scene.js';
-import { angleDelta } from './vehicles.js';
 
-const SKIN = [0xf2c09a, 0xc68863, 0x8a5a3b, 0xffe0bd];
-const SHIRTS = [0xe74c3c, 0x3498db, 0xf1c40f, 0x2ecc71, 0xe67e22, 0x9b59b6, 0xecf0f1, 0x1abc9c, 0xff7fab, 0x95a5a6];
-const PANTS = [0x2c3e50, 0x5d6d7e, 0x784212, 0x1a1a2e, 0xd6eaf8, 0x922b21];
+// ------------------------------------------------------------------ palette
 
-let sharedMat = null;
+/** Shirt colours the crowd wears — sun-bleached tees, work shirts, tourist prints. */
+const SHIRTS = [0xe8e0d0, 0xd94f3d, 0x3d7bd9, 0x53b06a, 0xf2b13d, 0x7a4a5e, 0x39594f, 0xe07b39, 0x8a6fbf, 0x2f6f6a];
+/** Trouser colours. */
+const PANTS = [0x2b3440, 0x4a4640, 0x6b5a48, 0x3d4a5e, 0x5e3d4a, 0x2f4038];
+/** Skin tones across the crowd. */
+const SKINS = [0xf2c9a0, 0xe0ac82, 0xc98d64, 0x8a5a3b, 0x6b4426, 0xf7d7b5];
+/** Hair / cap colours. */
+const HAIRS = [0x1c1a18, 0x3d2b1f, 0x6b4a2f, 0x8a8a8a, 0xd94f3d, 0xf2b13d];
 
-/** Build a person: body (legs excluded) as one merged mesh, legs separate for the swing. */
-export function makePerson({ shirt, pants, skin, cap = 0 }) {
-  if (!sharedMat) sharedMat = partMaterial();
-  const group = new THREE.Group();
-  const bodyParts = [
-    { w: 0.62, h: 0.78, d: 0.34, x: 0, y: 1.18, z: 0, color: shirt },          // torso
-    { w: 0.34, h: 0.34, d: 0.34, x: 0, y: 1.78, z: 0, color: skin },           // head
-    { w: 0.16, h: 0.62, d: 0.16, x: -0.42, y: 1.16, z: 0, color: shirt },      // arm L
-    { w: 0.16, h: 0.62, d: 0.16, x: 0.42, y: 1.16, z: 0, color: shirt },       // arm R
-  ];
-  if (cap) bodyParts.push({ w: 0.4, h: 0.1, d: 0.4, x: 0, y: 1.99, z: 0, color: cap });
-  if (cap) bodyParts.push({ w: 0.38, h: 0.06, d: 0.3, x: 0, y: 1.95, z: 0.3, color: cap });
-  const body = new THREE.Mesh(mergeParts(bodyParts), sharedMat);
-  body.castShadow = true;
-  group.add(body);
-  const legGeoParts = [{ w: 0.2, h: 0.8, d: 0.22, x: 0, y: -0.4, z: 0, color: pants }];
-  const legGeo = mergeParts(legGeoParts);
-  const legL = new THREE.Mesh(legGeo, sharedMat);
-  legL.position.set(-0.16, 0.82, 0);
-  const legR = new THREE.Mesh(legGeo, sharedMat);
-  legR.position.set(0.16, 0.82, 0);
-  group.add(legL); group.add(legR);
-  return { group, body, legL, legR };
-}
+const BODY_GEO = {
+  torso: new THREE.BoxGeometry(0.62, 0.72, 0.34),
+  head: new THREE.BoxGeometry(0.34, 0.36, 0.32),
+  arm: new THREE.BoxGeometry(0.16, 0.62, 0.18),
+  leg: new THREE.BoxGeometry(0.2, 0.66, 0.22),
+  cap: new THREE.BoxGeometry(0.4, 0.12, 0.38),
+};
 
-/** Animate a person's walk cycle from its speed and accumulated phase. */
-export function animatePerson(person, dt) {
-  const speed = Math.hypot(person.vx || 0, person.vz || 0);
-  person.phase = (person.phase || 0) + dt * (2 + speed * 1.6);
-  const swing = Math.min(0.65, speed * 0.14) * Math.sin(person.phase);
-  person.parts.legL.rotation.x = swing;
-  person.parts.legR.rotation.x = -swing;
-  person.parts.body.position.y = Math.abs(Math.sin(person.phase)) * 0.05 * Math.min(1, speed);
-  person.mesh.position.set(person.x, person.state === 'down' ? 0.25 : 0, person.z);
-  person.mesh.rotation.y = person.heading;
-  if (person.state === 'down') person.mesh.rotation.z = Math.PI / 2 - 0.12;
-  else person.mesh.rotation.z = 0;
-}
-
-/** Create a pedestrian who lives on one block's sidewalk ring. */
-export function createPedestrian(ring, rng) {
-  const parts = makePerson({
-    shirt: rng.pick(SHIRTS), pants: rng.pick(PANTS), skin: rng.pick(SKIN),
-    cap: rng.chance(0.3) ? rng.pick(SHIRTS) : 0,
-  });
-  const ped = {
-    x: ring.x + rng.float(-ring.ring, ring.ring), z: ring.z - ring.ring,
-    heading: rng.angle(), vx: 0, vz: 0, phase: rng.float(0, 6),
-    health: 60, state: 'walk', fleeT: 0, idleT: 0, home: ring, wp: null,
-    mesh: parts.group, parts, dead: false, respawnT: 0,
-  };
-  pickWaypoint(ped, rng);
-  return ped;
-}
-
-/** A new random target point on the pedestrian's home ring (a rectangle path). */
-function pickWaypoint(ped, rng) {
-  const { x: cx, z: cz, ring: r } = ped.home;
-  const side = rng.int(0, 3);
-  const t = rng.float(-r, r);
-  if (side === 0) ped.wp = { x: cx + t, z: cz - r };
-  else if (side === 1) ped.wp = { x: cx + t, z: cz + r };
-  else if (side === 2) ped.wp = { x: cx - r, z: cz + t };
-  else ped.wp = { x: cx + r, z: cz + t };
-}
-
-/** Pedestrian update: stroll to waypoints, flee threats, lie still when down. */
-export function stepPedestrian(ped, dt, city, rng, threat) {
-  if (ped.state === 'down') {
-    ped.vx = 0; ped.vz = 0;
-    ped.respawnT -= dt;
-    animatePerson(ped, dt);
-    return;
-  }
-  let speed = 2.2;
-  let tx = ped.wp.x; let tz = ped.wp.z;
-  if (threat && Math.hypot(threat.x - ped.x, threat.z - ped.z) < 14) { ped.fleeT = 2.6; ped.idleT = 0; }
-  if (ped.fleeT > 0) {
-    ped.fleeT -= dt;
-    speed = 8.5;
-    const away = Math.atan2(ped.x - (threat ? threat.x : ped.x), ped.z - (threat ? threat.z : ped.z));
-    tx = ped.x + Math.sin(away) * 10;
-    tz = ped.z + Math.cos(away) * 10;
-  } else if (ped.idleT > 0) {
-    // A breather at the corner: stand, watch the traffic go by, then stroll on.
-    ped.idleT -= dt;
-    ped.vx = 0; ped.vz = 0;
-    animatePerson(ped, dt);
-    return;
-  } else if (Math.hypot(tx - ped.x, tz - ped.z) < 1.2) {
-    if (rng.chance(0.3)) ped.idleT = rng.float(0.8, 2.4);
-    pickWaypoint(ped, rng);
-    tx = ped.wp.x; tz = ped.wp.z;
-  }
-  const desired = Math.atan2(tx - ped.x, tz - ped.z);
-  ped.heading += Math.max(-3.2 * dt, Math.min(3.2 * dt, angleDelta(ped.heading, desired)));
-  ped.vx = Math.sin(ped.heading) * speed;
-  ped.vz = Math.cos(ped.heading) * speed;
-  ped.x += ped.vx * dt;
-  ped.z += ped.vz * dt;
-  const fixed = collideBuildings(city, ped.x, ped.z, 0.7);
-  if (fixed.x !== ped.x || fixed.z !== ped.z) pickWaypoint(ped, rng);
-  ped.x = fixed.x; ped.z = fixed.z;
-  animatePerson(ped, dt);
-}
-
-/** Knock a pedestrian down (car hit, punch, bullet): they stay down, then quietly respawn. */
-export function knockDown(ped, rng) {
-  if (ped.state === 'down') return;
-  ped.state = 'down';
-  ped.health = 0;
-  ped.respawnT = 14;
-  ped.mesh.rotation.z = Math.PI / 2 - 0.12;
-}
-
-/** Respawn a downed pedestrian at a fresh ring point, good as new (off-screen cleanup). */
-export function respawnPedestrian(ped, rng) {
-  ped.state = 'walk';
-  ped.health = 60;
-  ped.x = ped.home.x + rng.float(-ped.home.ring, ped.home.ring);
-  ped.z = ped.home.z - ped.home.ring;
-  pickWaypoint(ped, rng);
+function personMaterial(color) {
+  return new THREE.MeshLambertMaterial({ color });
 }
 
 /**
- * The player character entity: Rico, in a coral shirt and a teal cap so he reads at a
- * glance. Movement is camera-relative; main.js owns the camera and passes its yaw.
+ * Build one box person and return its group. The group carries its limb pivots in
+ * userData.limbs and its walk phase in userData.phase, which animatePerson drives.
+ * `cap` is 0 for bare hair, 1 for a cap, 2 for a wide sun hat.
  */
-export function createPlayer() {
-  const parts = makePerson({ shirt: 0xff5964, pants: 0x22304a, skin: 0xc68863, cap: 0x14b8a6 });
+export function makePerson({ shirt, pants, skin, cap = 0 }) {
+  const group = new THREE.Group();
+  const torsoMat = personMaterial(shirt);
+  const pantsMat = personMaterial(pants);
+  const skinMat = personMaterial(skin);
+  const hairMat = personMaterial(HAIRS[Math.floor(Math.random() * HAIRS.length)]);
+
+  const torso = new THREE.Mesh(BODY_GEO.torso, torsoMat);
+  torso.position.y = 1.02;
+  torso.castShadow = true;
+  group.add(torso);
+
+  const head = new THREE.Mesh(BODY_GEO.head, skinMat);
+  head.position.y = 1.56;
+  head.castShadow = true;
+  group.add(head);
+
+  if (cap === 1) {
+    const capMesh = new THREE.Mesh(BODY_GEO.cap, personMaterial(0x2b3440));
+    capMesh.position.y = 1.78;
+    group.add(capMesh);
+  } else if (cap === 2) {
+    const brim = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.05, 0.6), personMaterial(0xf2e3b3));
+    brim.position.y = 1.76;
+    group.add(brim);
+  } else {
+    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.12, 0.34), hairMat);
+    hair.position.y = 1.76;
+    group.add(hair);
+  }
+
+  const armL = new THREE.Group();
+  armL.position.set(-0.4, 1.32, 0);
+  const armLMesh = new THREE.Mesh(BODY_GEO.arm, skinMat);
+  armLMesh.position.y = -0.28;
+  armLMesh.castShadow = true;
+  armL.add(armLMesh);
+  const armR = new THREE.Group();
+  armR.position.set(0.4, 1.32, 0);
+  const armRMesh = new THREE.Mesh(BODY_GEO.arm, skinMat);
+  armRMesh.position.y = -0.28;
+  armRMesh.castShadow = true;
+  armR.add(armRMesh);
+  const legL = new THREE.Group();
+  legL.position.set(-0.16, 0.68, 0);
+  const legLMesh = new THREE.Mesh(BODY_GEO.leg, pantsMat);
+  legLMesh.position.y = -0.32;
+  legLMesh.castShadow = true;
+  legL.add(legLMesh);
+  const legR = new THREE.Group();
+  legR.position.set(0.16, 0.68, 0);
+  const legRMesh = new THREE.Mesh(BODY_GEO.leg, pantsMat);
+  legRMesh.position.y = -0.32;
+  legRMesh.castShadow = true;
+  legR.add(legRMesh);
+  group.add(armL, armR, legL, legR);
+
+  group.userData.limbs = { armL, armR, legL, legR };
+  group.userData.phase = Math.random() * Math.PI * 2;
+  group.userData.moveSpeed = 0;
+  return group;
+}
+
+/**
+ * Advance one person's walk cycle. The swing amplitude grows with the speed the
+ * caller stored in group.userData.moveSpeed, and the phase advances in step with
+ * it, so the feet roughly match the ground speed instead of moonwalking.
+ */
+export function animatePerson(person, dt) {
+  const data = person.userData;
+  const limbs = data.limbs;
+  if (!limbs) return;
+  const speed = data.moveSpeed || 0;
+  data.phase += dt * (2.2 + speed * 1.15);
+  const swing = Math.min(0.75, speed * 0.09) * Math.sin(data.phase);
+  const counter = Math.min(0.75, speed * 0.09) * Math.sin(data.phase + Math.PI);
+  limbs.legL.rotation.x = swing;
+  limbs.legR.rotation.x = counter;
+  limbs.armL.rotation.x = counter * 0.8;
+  limbs.armR.rotation.x = swing * 0.8;
+  // A running figure leans into the stride; a strolling one stays upright.
+  person.rotation.x = 0;
+  const torsoLean = Math.min(0.12, speed * 0.008);
+  limbs.armL.rotation.x -= torsoLean;
+  limbs.armR.rotation.x -= torsoLean;
+}
+
+// ------------------------------------------------------------------ pedestrians
+
+/** How far a pedestrian notices a crime and starts running. */
+const FLEE_RADIUS = 15;
+/** How far a fleeing pedestrian runs before it dares to slow down. */
+const FLEE_DISTANCE = 26;
+/** Panic bursts last this long before the pedestrian picks a new direction. */
+const PANIC_SPAN = 1.6;
+
+/** Pick a fresh waypoint on the pedestrian's home sidewalk ring. */
+function ringWaypoint(ped, rng) {
+  const a = rng.angle();
   return {
-    x: 0, z: 0, heading: Math.PI, vx: 0, vz: 0, phase: 0,
-    health: PLAYER.maxHealth, state: 'foot', car: null,
-    mesh: parts.group, parts, punchCd: 0, shootCd: 0,
+    x: ped.home.x + Math.cos(a) * ped.home.ring,
+    z: ped.home.z + Math.sin(a) * ped.home.ring,
   };
 }
 
-/** Move Rico on foot from input, relative to the camera yaw. Returns his speed. */
-export function stepPlayerOnFoot(player, dt, input, camYaw, city) {
-  const ix = input.steer();
-  const iz = input.throttle();
-  let speed = 0;
-  if (ix !== 0 || iz !== 0) {
-    const len = Math.hypot(ix, iz);
-    // Camera forward on the ground is -(sin camYaw, cos camYaw) (the camera sits behind
-    // the player, looking past him); camera right is (cos camYaw, -sin camYaw).
-    const mx = (-Math.sin(camYaw) * iz + Math.cos(camYaw) * ix) / len;
-    const mz = (-Math.cos(camYaw) * iz - Math.sin(camYaw) * ix) / len;
-    const target = Math.atan2(mx, mz);
-    player.heading += Math.max(-11 * dt, Math.min(11 * dt, angleDelta(player.heading, target)));
-    speed = input.held.run ? PLAYER.runSpeed : PLAYER.walkSpeed;
-    player.vx = mx * speed;
-    player.vz = mz * speed;
-  } else {
-    player.vx = 0; player.vz = 0;
+/**
+ * Spawn one pedestrian on the sidewalk ring of `spot` ({x, z, ring} from the
+ * city's pedSpots). The figure keeps its home ring for the rest of its life, so
+ * respawns and wandering never drift it across the map.
+ */
+export function createPedestrian(spot, rng) {
+  const outfit = {
+    shirt: rng.pick(SHIRTS),
+    pants: rng.pick(PANTS),
+    skin: rng.pick(SKINS),
+    cap: rng.int(0, 2),
+  };
+  const mesh = makePerson(outfit);
+  const a = rng.angle();
+  const ped = {
+    mesh,
+    home: { x: spot.x, z: spot.z, ring: spot.ring || 16 },
+    x: spot.x + Math.cos(a) * (spot.ring || 16),
+    z: spot.z + Math.sin(a) * (spot.ring || 16),
+    heading: rng.angle(),
+    state: 'stroll', // stroll | idle | flee | panic | down
+    speed: 0,
+    walkPhase: rng.float(0, 6),
+    respawnT: 0,
+    waitT: rng.float(0, 2),
+    panicT: 0,
+    target: null,
+    fleeFrom: null,
+    downT: 0,
+  };
+  ped.target = ringWaypoint(ped, rng);
+  mesh.position.set(ped.x, 0, ped.z);
+  mesh.rotation.y = ped.heading;
+  return ped;
+}
+
+/** Tip a pedestrian over: down on the pavement, limbs slack, out for a while. */
+export function knockDown(ped, rng) {
+  if (ped.state === 'down') return;
+  ped.state = 'down';
+  ped.speed = 0;
+  ped.downT = 0;
+  ped.respawnT = rng.float(7, 13);
+  ped.mesh.rotation.set(0, ped.heading, Math.PI / 2 - 0.12);
+  ped.mesh.position.y = 0.28;
+  const limbs = ped.mesh.userData.limbs;
+  if (limbs) {
+    limbs.armL.rotation.x = -1.2;
+    limbs.armR.rotation.x = 0.9;
+    limbs.legL.rotation.x = 0.35;
+    limbs.legR.rotation.x = -0.25;
   }
+}
+
+/**
+ * Bring a down pedestrian back: a fresh face on the same home ring, standing up,
+ * walking again. Called only once the player is far away, so nobody watches the
+ * trick happen.
+ */
+export function respawnPedestrian(ped, rng) {
+  const a = rng.angle();
+  ped.x = ped.home.x + Math.cos(a) * ped.home.ring;
+  ped.z = ped.home.z + Math.sin(a) * ped.home.ring;
+  ped.heading = rng.angle();
+  ped.state = 'stroll';
+  ped.speed = 0;
+  ped.respawnT = 0;
+  ped.waitT = rng.float(0, 1.5);
+  ped.target = ringWaypoint(ped, rng);
+  ped.mesh.rotation.set(0, ped.heading, 0);
+  ped.mesh.position.set(ped.x, 0, ped.z);
+  ped.mesh.userData.phase = rng.float(0, 6);
+}
+
+/** Steer one pedestrian toward a point at a given speed, keeping out of walls. */
+function walkToward(ped, dt, city, tx, tz, speed) {
+  const dx = tx - ped.x;
+  const dz = tz - ped.z;
+  const dist = Math.hypot(dx, dz);
+  if (dist < 0.6) return true;
+  const want = Math.atan2(dx, dz);
+  let turn = want - ped.heading;
+  while (turn > Math.PI) turn -= Math.PI * 2;
+  while (turn < -Math.PI) turn += Math.PI * 2;
+  ped.heading += Math.max(-3.4 * dt, Math.min(3.4 * dt, turn));
+  const step = Math.min(dist, speed * dt);
+  ped.x += Math.sin(ped.heading) * step;
+  ped.z += Math.cos(ped.heading) * step;
+  const fixed = collideBuildings(city, ped.x, ped.z, PLAYER.radius);
+  ped.x = fixed.x;
+  ped.z = fixed.z;
+  ped.speed = speed;
+  return dist < 1.2;
+}
+
+/**
+ * One pedestrian's frame. `threat` is the player (or their car) while a crime is
+ * fresh, otherwise null. A threatened pedestrian within earshot flees away from
+ * the threat; one that was just run over stays down until its timer ends.
+ */
+export function stepPedestrian(ped, dt, city, rng, threat) {
+  if (ped.state === 'down') {
+    ped.respawnT -= dt;
+    ped.downT += dt;
+    ped.mesh.userData.moveSpeed = 0;
+    return;
+  }
+
+  // A fresh crime nearby turns a stroll into a sprint away from the trouble.
+  if (threat) {
+    const dx = ped.x - threat.x;
+    const dz = ped.z - threat.z;
+    const d = Math.hypot(dx, dz);
+    if (d < FLEE_RADIUS) {
+      ped.state = 'flee';
+      ped.fleeFrom = { x: threat.x, z: threat.z };
+      ped.panicT = PANIC_SPAN;
+    }
+  }
+
+  if (ped.state === 'flee') {
+    const from = ped.fleeFrom || { x: ped.x, z: ped.z };
+    const away = Math.atan2(ped.x - from.x, ped.z - from.z);
+    // Run away, but wobble the line so a crowd doesn't march in lockstep.
+    const wobble = Math.sin(ped.walkPhase * 0.9) * 0.45;
+    const tx = ped.x + Math.sin(away + wobble) * FLEE_DISTANCE;
+    const tz = ped.z + Math.cos(away + wobble) * FLEE_DISTANCE;
+    ped.walkPhase += dt * 9;
+    walkToward(ped, dt, city, tx, tz, 5.6);
+    ped.panicT -= dt;
+    const threatD = threat ? Math.hypot(ped.x - threat.x, ped.z - threat.z) : 99;
+    if (threatD > FLEE_DISTANCE && ped.panicT <= 0) {
+      ped.state = 'stroll';
+      ped.target = ringWaypoint(ped, rng);
+      ped.waitT = rng.float(0, 1);
+    }
+  } else if (ped.state === 'panic') {
+    ped.panicT -= dt;
+    ped.walkPhase += dt * 9;
+    const tx = ped.x + Math.sin(ped.heading) * 20;
+    const tz = ped.z + Math.cos(ped.heading) * 20;
+    walkToward(ped, dt, city, tx, tz, 6.4);
+    if (ped.panicT <= 0) {
+      ped.state = 'stroll';
+      ped.target = ringWaypoint(ped, rng);
+    }
+  } else if (ped.state === 'idle') {
+    ped.waitT -= dt;
+    ped.speed = 0;
+    ped.mesh.userData.moveSpeed = 0;
+    if (ped.waitT <= 0) {
+      ped.state = 'stroll';
+      ped.target = ringWaypoint(ped, rng);
+    }
+  } else {
+    // Stroll: amble to the waypoint, then idle a beat and pick another.
+    ped.walkPhase += dt * 3.2;
+    const arrived = walkToward(ped, dt, city, ped.target.x, ped.target.z, 1.7);
+    if (arrived) {
+      ped.state = 'idle';
+      ped.waitT = rng.float(0.5, 3.5);
+      ped.speed = 0;
+    }
+  }
+
+  ped.mesh.position.set(ped.x, 0, ped.z);
+  ped.mesh.rotation.y = ped.heading;
+  ped.mesh.userData.moveSpeed = ped.speed;
+  animatePerson(ped.mesh, dt);
+}
+
+// ------------------------------------------------------------------ the player
+
+/**
+ * Rico Vega, the player on foot. The same limb rig as the crowd, dressed to
+ * stand out: a mustard jacket over a white tee, dark jeans, no hat.
+ */
+export function createPlayer() {
+  const mesh = makePerson({ shirt: 0xf2b13d, pants: 0x2b3440, skin: 0xe0ac82, cap: 0 });
+  mesh.userData.phase = 0;
+  return {
+    mesh,
+    x: 0,
+    z: 0,
+    heading: Math.PI,
+    vx: 0,
+    vz: 0,
+    health: PLAYER.maxHealth,
+    punchCd: 0,
+    shootCd: 0,
+    walkPhase: 0,
+  };
+}
+
+/**
+ * Move Rico on foot. W/A/S/D move relative to the camera (W is away from it),
+ * Shift runs. Velocity eases toward the wish direction so starting and stopping
+ * have weight, and the figure turns to face where it is actually going.
+ */
+export function stepPlayerOnFoot(player, dt, input, camYaw, city) {
+  const held = input.held;
+  // Camera-relative basis: forward is away from the camera, right is 90° clockwise.
+  const fwdX = -Math.sin(camYaw);
+  const fwdZ = -Math.cos(camYaw);
+  const rightX = -Math.cos(camYaw);
+  const rightZ = Math.sin(camYaw);
+  let wishX = 0;
+  let wishZ = 0;
+  if (held.forward) { wishX += fwdX; wishZ += fwdZ; }
+  if (held.back) { wishX -= fwdX; wishZ -= fwdZ; }
+  if (held.right) { wishX += rightX; wishZ += rightZ; }
+  if (held.left) { wishX -= rightX; wishZ -= rightZ; }
+  const wishLen = Math.hypot(wishX, wishZ);
+  const running = Boolean(held.run);
+  const topSpeed = running ? PLAYER.runSpeed : PLAYER.walkSpeed;
+
+  if (wishLen > 0.01) {
+    const nx = wishX / wishLen;
+    const nz = wishZ / wishLen;
+    const accel = 46;
+    player.vx += nx * accel * dt;
+    player.vz += nz * accel * dt;
+    const speed = Math.hypot(player.vx, player.vz);
+    if (speed > topSpeed) {
+      player.vx = (player.vx / speed) * topSpeed;
+      player.vz = (player.vz / speed) * topSpeed;
+    }
+    const wantHeading = Math.atan2(player.vx, player.vz);
+    let turn = wantHeading - player.heading;
+    while (turn > Math.PI) turn -= Math.PI * 2;
+    while (turn < -Math.PI) turn += Math.PI * 2;
+    player.heading += Math.max(-11 * dt, Math.min(11 * dt, turn));
+  } else {
+    // No input: friction bleeds the velocity off instead of stopping dead.
+    const drag = Math.max(0, 1 - 9 * dt);
+    player.vx *= drag;
+    player.vz *= drag;
+    if (Math.hypot(player.vx, player.vz) < 0.15) { player.vx = 0; player.vz = 0; }
+  }
+
   player.x += player.vx * dt;
   player.z += player.vz * dt;
   const fixed = collideBuildings(city, player.x, player.z, PLAYER.radius);
-  player.x = fixed.x; player.z = fixed.z;
-  animatePerson(player, dt);
-  return speed;
+  if (fixed.x !== player.x || fixed.z !== player.z) {
+    // Brushed a wall: kill the into-the-wall component so Rico slides along it.
+    const hitX = fixed.x !== player.x;
+    const hitZ = fixed.z !== player.z;
+    player.x = fixed.x;
+    player.z = fixed.z;
+    if (hitX) player.vx = 0;
+    if (hitZ) player.vz = 0;
+  }
+
+  const speed = Math.hypot(player.vx, player.vz);
+  player.walkPhase += dt * (2 + speed * 1.2);
+  player.mesh.position.set(player.x, 0, player.z);
+  player.mesh.rotation.y = player.heading;
+  player.mesh.userData.moveSpeed = speed;
+  animatePerson(player.mesh, dt);
 }
