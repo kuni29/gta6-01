@@ -40,6 +40,12 @@ export class Hud {
     this.objText = this.objectiveEl ? this.objectiveEl.querySelector('.obj-text') : null;
     this.objTimer = this.objectiveEl ? this.objectiveEl.querySelector('.obj-timer') : null;
     this.promptEl = document.getElementById('prompt');
+    this.hintEl = document.createElement('div');
+    this.hintEl.id = 'hint';
+    this.hintEl.innerHTML = '<span style="color:#ffd94d;font-weight:700">W A S D</span> move &nbsp;·&nbsp; <span style="color:#ffd94d;font-weight:700">E</span> enter car / take job &nbsp;·&nbsp; <span style="color:#ffd94d;font-weight:700">Shift</span> run';
+    this.hintEl.style.cssText = 'position:absolute;left:50%;bottom:170px;transform:translateX(-50%);background:rgba(10,10,24,.8);border-radius:8px;padding:8px 16px;font-size:16px;display:none;white-space:nowrap;';
+    if (this.root) this.root.appendChild(this.hintEl);
+    this.hintT = 0;
     this.toastEl = document.getElementById('toast');
     this.bustedEl = document.getElementById('bustedbar');
     this.bustedFill = document.getElementById('bustedfill');
@@ -57,6 +63,19 @@ export class Hud {
   /** Show or hide the whole HUD (title screen hides it, play shows it). */
   show(on) {
     if (this.root) this.root.classList.toggle('on', Boolean(on));
+  }
+
+  /**
+   * First-seconds control reminder. The title screen lists the controls, but
+   * it vanishes the moment play starts, so a first-time player has no way to
+   * recover them in game. Shown only on a fresh new game; update() counts it
+   * down and fades it out, and it never comes back.
+   */
+  showHint() {
+    if (!this.hintEl) return;
+    this.hintEl.style.display = 'block';
+    this.hintEl.style.opacity = '1';
+    this.hintT = 12;
   }
 
   /** Cash readout, top right. */
@@ -180,6 +199,13 @@ export class Hud {
 
   /** Per-frame housekeeping: toast fade and damage-flash decay. */
   update(dt) {
+    if (this.hintT > 0 && this.hintEl) {
+      this.hintT -= dt;
+      if (this.hintT <= 2) {
+        this.hintEl.style.opacity = String(Math.max(0, this.hintT / 2));
+      }
+      if (this.hintT <= 0) this.hintEl.style.display = 'none';
+    }
     if (this.toastT > 0 && this.toastEl) {
       this.toastT -= dt;
       if (this.toastT <= TOAST_FADE) {

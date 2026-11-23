@@ -677,6 +677,9 @@ function startPlay(fresh) {
   document.getElementById('title-screen').classList.remove('on');
   document.getElementById('end-screen').classList.remove('on');
   hud.show(true);
+  // Fresh new game only: respawn re-shows the HUD through its own path
+  // and must not bring the control hint back.
+  if (fresh && typeof hud.showHint === 'function') hud.showHint();
   hud.setCash(cash);
   hud.setPackages(packagesFound.size, PACKAGES.count);
   input.drain(); // a click on the menu must not fire (or pause) the first frame of play
