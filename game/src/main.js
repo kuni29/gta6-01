@@ -75,7 +75,7 @@ const cars = spawnFleet(city, rng, 16, 14);
 for (const c of cars) scene.add(c.mesh);
 const police = [];
 const peds = [];
-for (let i = 0; i < 26; i += 1) {
+for (let i = 0; i < 200; i += 1) {
   const ped = createPedestrian(city.pedSpots[i % city.pedSpots.length], rng);
   peds.push(ped);
   scene.add(ped.mesh);
